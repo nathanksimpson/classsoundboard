@@ -583,6 +583,24 @@
     return m ? m[1] : null;
   }
 
+  function parseYouTubeVideoId(url) {
+    const text = String(url || '').trim();
+    let m = text.match(/[?&]v=([a-zA-Z0-9_-]{6,})/);
+    if (m && m[1]) return m[1];
+    m = text.match(/youtu\.be\/([a-zA-Z0-9_-]{6,})/);
+    if (m && m[1]) return m[1];
+    m = text.match(/youtube\.com\/shorts\/([a-zA-Z0-9_-]{6,})/);
+    if (m && m[1]) return m[1];
+    return null;
+  }
+
+  function detectWebSource(url) {
+    const text = String(url || '').toLowerCase();
+    if (text.includes('blerp.com/soundbites/')) return 'blerp';
+    if (text.includes('youtube.com') || text.includes('youtu.be')) return 'youtube';
+    return null;
+  }
+
   function parseFirstAudioUrlFromText(text) {
     if (!text) return null;
     // Prefer direct audio links found in HTML/JSON blobs.
@@ -596,55 +614,13 @@
     return null;
   }
 
-  async function addFromBlerpUrl() {
-    if (!currentBoard) return;
-    const url = window.prompt('Paste a Blerp sound URL:', 'https://blerp.com/soundbites/');
-    if (!url) return;
-    const normalized = String(url).trim();
-    if (!/^https?:\/\//i.test(normalized)) {
-      alert('Please enter a full URL that starts with http:// or https://');
-      return;
-    }
-
-    const soundId = parseBlerpSoundId(normalized);
-    if (!soundId) {
-      alert('That does not look like a Blerp sound URL. Example: https://blerp.com/soundbites/<id>');
-      return;
-    }
-
-    const fetchTargets = [
-      normalized,
-      'https://r.jina.ai/http://' + normalized.replace(/^https?:\/\//i, '')
-    ];
-
-    let title = 'Blerp ' + soundId;
-    let fileUrl = null;
-    for (const target of fetchTargets) {
-      try {
-        const res = await fetch(target);
-        if (!res.ok) continue;
-        const text = await res.text();
-        const titleMatch = text.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i);
-        if (titleMatch && titleMatch[1]) title = titleMatch[1];
-        const parsedAudio = parseFirstAudioUrlFromText(text);
-        if (parsedAudio) {
-          fileUrl = parsedAudio;
-          break;
-        }
-      } catch (_) {}
-    }
-
-    if (!fileUrl) {
-      alert('Could not auto-extract the audio file from this Blerp page. This can happen due site protections. You can still add it manually in Add Sound.');
-      return;
-    }
-
+  function createDraftWebSound(params) {
     const sound = Board.normalizeSound({
       id: Board.generateId(),
-      title,
-      fileUrl,
-      imageUrl: '',
-      category: 'Blerp',
+      title: params.title || 'New Web Sound',
+      fileUrl: params.fileUrl || '',
+      imageUrl: params.imageUrl || '',
+      category: params.category || 'Web',
       tags: [],
       volume: 1,
       playbackRate: 1,
@@ -653,12 +629,128 @@
       endMs: null,
       hotkey: '',
       color: '#6b7280',
-      extra: { source: 'blerp', blerpUrl: normalized, blerpId: soundId }
+      extra: params.extra || {}
     });
     currentBoard.sounds.push(sound);
     buildHotkeyMap();
     saveToStorage();
     render();
+    openModal(sound);
+  }
+
+  async function addFromWebUrl() {
+    if (!currentBoard) return;
+    const url = window.prompt(
+      'Add Web Sound\n\nSupported source links:\n- Blerp sound link\n- YouTube video link\n\nPaste one link below:',
+      'https://blerp.com/soundbites/'
+    );
+    if (!url) return;
+    const normalized = String(url).trim();
+    if (!/^https?:\/\//i.test(normalized)) {
+      alert('Please enter a full URL that starts with http:// or https://');
+      return;
+    }
+
+    const source = detectWebSource(normalized);
+    if (!source) {
+      alert('Unsupported link. Please paste a Blerp sound URL or a YouTube video URL.');
+      return;
+    }
+
+    if (source === 'blerp') {
+      const soundId = parseBlerpSoundId(normalized);
+      if (!soundId) {
+        alert('That does not look like a Blerp sound URL. Example: https://blerp.com/soundbites/<id>');
+        return;
+      }
+      const fetchTargets = [
+        normalized,
+        'https://r.jina.ai/http://' + normalized.replace(/^https?:\/\//i, '')
+      ];
+      let title = 'Blerp ' + soundId;
+      let fileUrl = null;
+      for (const target of fetchTargets) {
+        try {
+          const res = await fetch(target);
+          if (!res.ok) continue;
+          const text = await res.text();
+          const titleMatch = text.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i);
+          if (titleMatch && titleMatch[1]) title = titleMatch[1];
+          const parsedAudio = parseFirstAudioUrlFromText(text);
+          if (parsedAudio) {
+            fileUrl = parsedAudio;
+            break;
+          }
+        } catch (_) {}
+      }
+      if (!fileUrl) {
+        createDraftWebSound({
+          title,
+          fileUrl: '',
+          category: 'Blerp',
+          extra: { source: 'blerp', blerpUrl: normalized, blerpId: soundId }
+        });
+        alert('Could not auto-extract audio from Blerp. I opened the sound editor with details pre-filled so you can paste the final audio URL and save.');
+        return;
+      }
+      createDraftWebSound({
+        title,
+        fileUrl,
+        category: 'Blerp',
+        extra: { source: 'blerp', blerpUrl: normalized, blerpId: soundId }
+      });
+      return;
+    }
+
+    if (source === 'youtube') {
+      const videoId = parseYouTubeVideoId(normalized);
+      if (!videoId) {
+        alert('That does not look like a valid YouTube video URL.');
+        return;
+      }
+      let title = 'YouTube ' + videoId;
+      let imageUrl = 'https://img.youtube.com/vi/' + videoId + '/hqdefault.jpg';
+      let fileUrl = null;
+
+      // Metadata is usually easy; direct playable audio URL is often restricted.
+      try {
+        const noembed = await fetch('https://noembed.com/embed?url=' + encodeURIComponent(normalized));
+        if (noembed.ok) {
+          const data = await noembed.json();
+          if (data && data.title) title = data.title;
+          if (data && data.thumbnail_url) imageUrl = data.thumbnail_url;
+        }
+      } catch (_) {}
+
+      const fetchTargets = [
+        normalized,
+        'https://r.jina.ai/http://' + normalized.replace(/^https?:\/\//i, '')
+      ];
+      for (const target of fetchTargets) {
+        try {
+          const res = await fetch(target);
+          if (!res.ok) continue;
+          const text = await res.text();
+          const parsedAudio = parseFirstAudioUrlFromText(text);
+          if (parsedAudio) {
+            fileUrl = parsedAudio;
+            break;
+          }
+        } catch (_) {}
+      }
+
+      createDraftWebSound({
+        title,
+        fileUrl: fileUrl || '',
+        imageUrl,
+        category: 'YouTube',
+        extra: { source: 'youtube', youtubeUrl: normalized, youtubeVideoId: videoId }
+      });
+
+      if (!fileUrl) {
+        alert('Imported YouTube metadata, but could not auto-extract a direct audio file URL. I opened the editor so you can paste an audio URL and save.');
+      }
+    }
   }
 
   function saveAllSettingsChanges(options = {}) {
@@ -1091,7 +1183,7 @@
     const importBtn = toolbarEl.querySelector('[data-action="import"]');
     const exportBtn = toolbarEl.querySelector('[data-action="export"]');
     const downloadBtn = toolbarEl.querySelector('[data-action="download-sounds"]');
-    const blerpAddBtn = toolbarEl.querySelector('[data-action="blerp-add"]');
+    const webAddBtn = toolbarEl.querySelector('[data-action="web-add"]');
     const settingsBtn = toolbarEl.querySelector('[data-action="settings-open"]');
     const reorderBtn = toolbarEl.querySelector('[data-action="reorder-toggle"]');
     const analyzeAllBtn = toolbarEl.querySelector('[data-action="analyze-all"]');
@@ -1100,7 +1192,7 @@
     if (importInput) importInput.addEventListener('change', (e) => { if (e.target.files[0]) importBoard(e.target.files[0]); e.target.value = ''; });
     if (exportBtn) exportBtn.addEventListener('click', exportBoard);
     if (downloadBtn) downloadBtn.addEventListener('click', downloadAllSounds);
-    if (blerpAddBtn) blerpAddBtn.addEventListener('click', addFromBlerpUrl);
+    if (webAddBtn) webAddBtn.addEventListener('click', addFromWebUrl);
     if (settingsBtn) settingsBtn.addEventListener('click', openSettingsScreen);
     if (reorderBtn) reorderBtn.addEventListener('click', () => setReorderMode(!reorderMode));
     if (analyzeAllBtn) analyzeAllBtn.addEventListener('click', analyzeAllSounds);
@@ -1145,14 +1237,14 @@
 
     if (quickBarEl) {
       const quickAdd = quickBarEl.querySelector('[data-action="quick-add"]');
-      const quickBlerp = quickBarEl.querySelector('[data-action="quick-blerp"]');
+      const quickWeb = quickBarEl.querySelector('[data-action="quick-web"]');
       const quickSearch = quickBarEl.querySelector('[data-action="quick-search"]');
       const quickSettings = quickBarEl.querySelector('[data-action="quick-settings"]');
       const quickReorder = quickBarEl.querySelector('[data-action="quick-reorder"]');
       const quickAnalyze = quickBarEl.querySelector('[data-action="quick-analyze"]');
 
       if (quickAdd) quickAdd.addEventListener('click', addSound);
-      if (quickBlerp) quickBlerp.addEventListener('click', addFromBlerpUrl);
+      if (quickWeb) quickWeb.addEventListener('click', addFromWebUrl);
       if (quickSearch) {
         quickSearch.addEventListener('click', function () {
           if (searchInputEl) {

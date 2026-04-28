@@ -185,6 +185,7 @@ function renderGroupedGrid(container, groups, playState, errorIds, onPlay, onEdi
 
   const isCollapsed = typeof options.isCollapsed === 'function' ? options.isCollapsed : (() => false);
   const onToggleCategory = typeof options.onToggleCategory === 'function' ? options.onToggleCategory : null;
+  const onReorderCategory = typeof options.onReorderCategory === 'function' ? options.onReorderCategory : null;
 
   list.forEach((g) => {
     const key = escapeText(g && g.key != null ? g.key : '');
@@ -229,6 +230,34 @@ function renderGroupedGrid(container, groups, playState, errorIds, onPlay, onEdi
       header.addEventListener('click', (e) => {
         e.preventDefault();
         onToggleCategory(key);
+      });
+    }
+
+    if (onReorderCategory) {
+      header.setAttribute('draggable', 'true');
+      header.classList.add('category__header--draggable');
+      header.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('text/plain', key);
+        e.dataTransfer.effectAllowed = 'move';
+        section.classList.add('category--dragging');
+      });
+      header.addEventListener('dragend', () => {
+        section.classList.remove('category--dragging');
+        container.querySelectorAll('.category--drag-over').forEach((n) => n.classList.remove('category--drag-over'));
+      });
+      section.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        section.classList.add('category--drag-over');
+      });
+      section.addEventListener('dragleave', () => {
+        section.classList.remove('category--drag-over');
+      });
+      section.addEventListener('drop', (e) => {
+        e.preventDefault();
+        section.classList.remove('category--drag-over');
+        const fromKey = e.dataTransfer.getData('text/plain');
+        if (!fromKey || fromKey === key) return;
+        onReorderCategory(fromKey, key);
       });
     }
 

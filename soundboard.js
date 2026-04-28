@@ -31,6 +31,10 @@
   const searchCountEl = document.getElementById('search-count');
   const autoLevelToggleEl = document.getElementById('auto-level-toggle');
   const quickBarEl = document.getElementById('quick-bar');
+  const settingsScreenEl = document.getElementById('settings-screen');
+  const settingsListEl = document.getElementById('settings-list');
+  const settingsSearchEl = document.getElementById('settings-search');
+  const settingsSearchCountEl = document.getElementById('settings-search-count');
 
   function getBoardJsonPath() {
     const base = window.location.pathname.replace(/\/[^/]*$/, '') || '/';
@@ -38,13 +42,20 @@
   }
 
   const CATEGORY_UI_KEY_PREFIX = 'soundboard-category-state:';
+  const CATEGORY_ORDER_KEY_PREFIX = 'soundboard-category-order:';
   const AUTO_LEVEL_KEY = 'soundboard-auto-level';
   let searchQuery = '';
   let categoryUiState = {};
+  let categoryOrder = [];
 
   function getCategoryStorageKey() {
     const boardId = currentBoard && currentBoard.id ? String(currentBoard.id) : 'default';
     return CATEGORY_UI_KEY_PREFIX + boardId;
+  }
+
+  function getCategoryOrderStorageKey() {
+    const boardId = currentBoard && currentBoard.id ? String(currentBoard.id) : 'default';
+    return CATEGORY_ORDER_KEY_PREFIX + boardId;
   }
 
   function loadCategoryUiState() {
@@ -64,9 +75,35 @@
     } catch (_) {}
   }
 
+  function loadCategoryOrder() {
+    try {
+      const raw = localStorage.getItem(getCategoryOrderStorageKey());
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.map((x) => String(x));
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function saveCategoryOrder() {
+    try {
+      localStorage.setItem(getCategoryOrderStorageKey(), JSON.stringify(categoryOrder || []));
+    } catch (_) {}
+  }
+
   function normalizeCategoryKey(category) {
     const raw = (category || '').trim();
     return raw ? raw : 'Uncategorized';
+  }
+
+  function escapeAttr(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
   }
 
   function soundMatchesQuery(sound, q) {
@@ -92,13 +129,42 @@
     });
 
     const keys = Array.from(map.keys());
+    const orderRank = new Map((categoryOrder || []).map((k, i) => [String(k), i]));
     keys.sort((a, b) => {
+      const ai = orderRank.has(a) ? orderRank.get(a) : Number.POSITIVE_INFINITY;
+      const bi = orderRank.has(b) ? orderRank.get(b) : Number.POSITIVE_INFINITY;
+      if (ai !== bi) return ai - bi;
       if (a === 'Uncategorized' && b !== 'Uncategorized') return -1;
       if (b === 'Uncategorized' && a !== 'Uncategorized') return 1;
       return a.localeCompare(b);
     });
 
+    // Keep persisted order clean and aligned with categories that still exist.
+    const keySet = new Set(keys);
+    const normalizedOrder = (categoryOrder || []).filter((k) => keySet.has(k));
+    keys.forEach((k) => {
+      if (!normalizedOrder.includes(k)) normalizedOrder.push(k);
+    });
+    categoryOrder = normalizedOrder;
+
     return keys.map((k) => ({ key: k, label: k, sounds: map.get(k) }));
+  }
+
+  function reorderCategories(fromKey, toKey) {
+    const from = String(fromKey || '');
+    const to = String(toKey || '');
+    if (!from || !to || from === to) return;
+    const arr = (categoryOrder || []).slice();
+    if (!arr.includes(from)) arr.push(from);
+    if (!arr.includes(to)) arr.push(to);
+    const fromIdx = arr.indexOf(from);
+    const toIdx = arr.indexOf(to);
+    if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return;
+    const item = arr.splice(fromIdx, 1)[0];
+    arr.splice(toIdx, 0, item);
+    categoryOrder = arr;
+    saveCategoryOrder();
+    render();
   }
 
   function updateSearchCount(count, total) {
@@ -146,6 +212,7 @@
       boardNameEl.title = 'Click to change board name';
     }
     categoryUiState = loadCategoryUiState();
+    categoryOrder = loadCategoryOrder();
     buildHotkeyMap();
     render();
     initBoardTitle();
@@ -196,7 +263,8 @@
             categoryUiState[k] = !current;
             saveCategoryUiState();
             render();
-          }
+          },
+          onReorderCategory: reorderCategories
         }
       );
     } else {
@@ -457,6 +525,128 @@
     if (modalEl) {
       modalEl.classList.remove('modal--open');
       modalEl.hidden = true;
+    }
+  }
+
+  function openSettingsScreen() {
+    if (!settingsScreenEl || !settingsListEl || !currentBoard) return;
+    settingsListEl.textContent = '';
+    if (settingsSearchEl) settingsSearchEl.value = '';
+    if (settingsSearchCountEl) settingsSearchCountEl.textContent = '';
+    const sounds = Array.isArray(currentBoard.sounds) ? currentBoard.sounds : [];
+    sounds.forEach((sound, idx) => {
+      const row = document.createElement('article');
+      row.className = 'settings-row';
+      row.dataset.soundId = sound.id;
+      row.dataset.searchText = [
+        sound.title || '',
+        sound.category || '',
+        sound.fileUrl || '',
+        sound.imageUrl || '',
+        sound.hotkey || ''
+      ].join(' ').toLowerCase();
+      row.innerHTML = ''
+        + '<div class="settings-row__top">'
+        + '  <div class="settings-row__name">' + escapeAttr((idx + 1) + '. ' + (sound.title || 'Untitled')) + '</div>'
+        + '  <label class="settings-row__delete"><input type="checkbox" data-field="delete"> Delete</label>'
+        + '</div>'
+        + '<div class="settings-row__grid">'
+        + '  <label><span class="field__label">Title</span><input class="field__input" data-field="title" type="text" value="' + escapeAttr(sound.title || '') + '"></label>'
+        + '  <label><span class="field__label">Audio URL</span><input class="field__input" data-field="fileUrl" type="text" value="' + escapeAttr(sound.fileUrl || '') + '"></label>'
+        + '  <label><span class="field__label">Image URL</span><input class="field__input" data-field="imageUrl" type="text" value="' + escapeAttr(sound.imageUrl || '') + '"></label>'
+        + '  <label><span class="field__label">Category</span><input class="field__input" data-field="category" type="text" value="' + escapeAttr(sound.category || '') + '"></label>'
+        + '  <label><span class="field__label">Hotkey</span><input class="field__input" data-field="hotkey" maxlength="1" type="text" value="' + escapeAttr(sound.hotkey || '') + '"></label>'
+        + '  <label><span class="field__label">Volume %</span><input class="field__input" data-field="volume" type="number" min="0" max="100" step="1" value="' + escapeAttr(Math.round((sound.volume != null ? sound.volume : 1) * 100)) + '"></label>'
+        + '  <label><span class="field__label">Speed</span><input class="field__input" data-field="playbackRate" type="number" min="0.5" max="2" step="0.1" value="' + escapeAttr(sound.playbackRate != null ? sound.playbackRate : 1) + '"></label>'
+        + '  <label><span class="field__label">Start sec</span><input class="field__input" data-field="startSec" type="number" min="0" step="0.01" value="' + escapeAttr(sound.startMs != null ? (sound.startMs / 1000) : '') + '"></label>'
+        + '  <label><span class="field__label">End sec</span><input class="field__input" data-field="endSec" type="number" min="0" step="0.01" value="' + escapeAttr(sound.endMs != null ? (sound.endMs / 1000) : '') + '"></label>'
+        + '  <label class="field--checkbox"><input data-field="loop" type="checkbox"' + (sound.loop ? ' checked' : '') + '><span class="field__label">Loop</span></label>'
+        + '</div>';
+      settingsListEl.appendChild(row);
+    });
+    filterSettingsRows('');
+    settingsScreenEl.hidden = false;
+    settingsScreenEl.setAttribute('aria-hidden', 'false');
+    if (settingsSearchEl) settingsSearchEl.focus();
+  }
+
+  function closeSettingsScreen() {
+    if (!settingsScreenEl) return;
+    settingsScreenEl.hidden = true;
+    settingsScreenEl.setAttribute('aria-hidden', 'true');
+  }
+
+  function saveAllSettingsChanges(options = {}) {
+    if (!settingsScreenEl || !settingsListEl || !currentBoard) return;
+    const closeAfterSave = options.closeAfterSave !== false;
+    const rows = Array.from(settingsListEl.querySelectorAll('.settings-row'));
+    const nextSounds = [];
+    for (const row of rows) {
+      const id = row.dataset.soundId;
+      const existing = currentBoard.sounds.find((s) => s.id === id);
+      if (!existing) continue;
+
+      const shouldDelete = !!(row.querySelector('[data-field="delete"]') && row.querySelector('[data-field="delete"]').checked);
+      if (shouldDelete) continue;
+
+      const title = ((row.querySelector('[data-field="title"]') || {}).value || '').trim();
+      const fileUrl = ((row.querySelector('[data-field="fileUrl"]') || {}).value || '').trim();
+      if (!title || !fileUrl) {
+        alert('Each kept sound needs a Title and Audio URL. Please fix and save again.');
+        return;
+      }
+
+      const volumeRaw = parseFloat(((row.querySelector('[data-field="volume"]') || {}).value || '100'));
+      const volume = isNaN(volumeRaw) ? 1 : Math.max(0, Math.min(1, volumeRaw / 100));
+      const speedRaw = parseFloat(((row.querySelector('[data-field="playbackRate"]') || {}).value || '1'));
+      const playbackRate = isNaN(speedRaw) ? 1 : Math.max(0.5, Math.min(2, speedRaw));
+
+      const startRaw = ((row.querySelector('[data-field="startSec"]') || {}).value || '').trim();
+      const endRaw = ((row.querySelector('[data-field="endSec"]') || {}).value || '').trim();
+      const startMs = startRaw === '' ? null : Math.round(parseFloat(startRaw) * 1000);
+      const endMs = endRaw === '' ? null : Math.round(parseFloat(endRaw) * 1000);
+      if (startMs != null && endMs != null && startMs >= endMs) {
+        alert('Start sec must be less than End sec.');
+        return;
+      }
+
+      existing.title = title;
+      existing.fileUrl = fileUrl;
+      existing.imageUrl = ((row.querySelector('[data-field="imageUrl"]') || {}).value || '').trim();
+      existing.category = ((row.querySelector('[data-field="category"]') || {}).value || '').trim();
+      existing.hotkey = ((row.querySelector('[data-field="hotkey"]') || {}).value || '').trim();
+      existing.volume = volume;
+      existing.playbackRate = playbackRate;
+      existing.startMs = startMs;
+      existing.endMs = endMs;
+      existing.loop = !!(row.querySelector('[data-field="loop"]') && row.querySelector('[data-field="loop"]').checked);
+      nextSounds.push(existing);
+    }
+
+    currentBoard.sounds = nextSounds;
+    buildHotkeyMap();
+    saveToStorage();
+    if (closeAfterSave) closeSettingsScreen();
+    if (!closeAfterSave && downloadStatus) {
+      downloadStatus.textContent = 'Settings saved.';
+      setTimeout(function () { if (downloadStatus) downloadStatus.textContent = ''; }, 1400);
+    }
+    render();
+  }
+
+  function filterSettingsRows(query) {
+    if (!settingsListEl) return;
+    const q = String(query || '').trim().toLowerCase();
+    const rows = Array.from(settingsListEl.querySelectorAll('.settings-row'));
+    let shown = 0;
+    rows.forEach((row) => {
+      const text = (row.dataset.searchText || '').toLowerCase();
+      const visible = !q || text.includes(q);
+      row.hidden = !visible;
+      if (visible) shown++;
+    });
+    if (settingsSearchCountEl) {
+      settingsSearchCountEl.textContent = q ? (shown + '/' + rows.length) : '';
     }
   }
 
@@ -816,6 +1006,7 @@
     const importBtn = toolbarEl.querySelector('[data-action="import"]');
     const exportBtn = toolbarEl.querySelector('[data-action="export"]');
     const downloadBtn = toolbarEl.querySelector('[data-action="download-sounds"]');
+    const settingsBtn = toolbarEl.querySelector('[data-action="settings-open"]');
     const reorderBtn = toolbarEl.querySelector('[data-action="reorder-toggle"]');
     const analyzeAllBtn = toolbarEl.querySelector('[data-action="analyze-all"]');
     if (addBtn) addBtn.addEventListener('click', addSound);
@@ -823,6 +1014,7 @@
     if (importInput) importInput.addEventListener('change', (e) => { if (e.target.files[0]) importBoard(e.target.files[0]); e.target.value = ''; });
     if (exportBtn) exportBtn.addEventListener('click', exportBoard);
     if (downloadBtn) downloadBtn.addEventListener('click', downloadAllSounds);
+    if (settingsBtn) settingsBtn.addEventListener('click', openSettingsScreen);
     if (reorderBtn) reorderBtn.addEventListener('click', () => setReorderMode(!reorderMode));
     if (analyzeAllBtn) analyzeAllBtn.addEventListener('click', analyzeAllSounds);
     if (globalVolumeEl && Audio) {
@@ -867,6 +1059,7 @@
     if (quickBarEl) {
       const quickAdd = quickBarEl.querySelector('[data-action="quick-add"]');
       const quickSearch = quickBarEl.querySelector('[data-action="quick-search"]');
+      const quickSettings = quickBarEl.querySelector('[data-action="quick-settings"]');
       const quickReorder = quickBarEl.querySelector('[data-action="quick-reorder"]');
       const quickAnalyze = quickBarEl.querySelector('[data-action="quick-analyze"]');
 
@@ -884,7 +1077,35 @@
           setReorderMode(!reorderMode);
         });
       }
+      if (quickSettings) quickSettings.addEventListener('click', openSettingsScreen);
       if (quickAnalyze) quickAnalyze.addEventListener('click', analyzeAllSounds);
+    }
+
+    if (settingsScreenEl) {
+      const saveBtn = settingsScreenEl.querySelector('[data-action="settings-save"]');
+      const cancelBtn = settingsScreenEl.querySelector('[data-action="settings-cancel"]');
+      if (saveBtn) saveBtn.addEventListener('click', saveAllSettingsChanges);
+      if (cancelBtn) cancelBtn.addEventListener('click', closeSettingsScreen);
+      if (settingsSearchEl) {
+        settingsSearchEl.addEventListener('input', function () {
+          filterSettingsRows(settingsSearchEl.value || '');
+        });
+      }
+      settingsScreenEl.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          const t = e.target;
+          if (t && (t.tagName || '').toLowerCase() === 'textarea') return;
+          const type = (t && t.type ? String(t.type) : '').toLowerCase();
+          if (type === 'button' || type === 'checkbox') return;
+          e.preventDefault();
+          saveAllSettingsChanges({ closeAfterSave: false });
+        }
+      });
+      settingsScreenEl.addEventListener('click', function (e) {
+        if (e.target && e.target.classList && e.target.classList.contains('settings-screen__backdrop')) {
+          closeSettingsScreen();
+        }
+      });
     }
   }
 
@@ -970,6 +1191,12 @@
 
   function initKeyboard() {
     document.addEventListener('keydown', (e) => {
+      if (settingsScreenEl && !settingsScreenEl.hidden && e.key === 'Escape') {
+        e.preventDefault();
+        closeSettingsScreen();
+        return;
+      }
+      if (settingsScreenEl && !settingsScreenEl.hidden) return;
       if (e.target && (e.target.closest('input') || e.target.closest('textarea'))) return;
       const key = (e.key || '').toUpperCase();
       const sound = key ? hotkeyMap.get(key) : null;

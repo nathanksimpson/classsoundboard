@@ -22,6 +22,7 @@
       </label>
       <button type="button" class="btn btn--secondary" data-action="export">Export Board</button>
       <button type="button" class="btn btn--secondary" data-action="download-sounds" title="Download each sound, save to a folder (or into the app), then update the board to use local copies">Download all sounds</button>
+      <button type="button" class="btn btn--secondary" data-action="settings-open" title="Edit all sounds in one long list">Board settings</button>
       <label class="btn btn--secondary auto-level" title="Automatically level sound volumes">
         <input type="checkbox" id="auto-level-toggle" class="auto-level__check" checked>
         <span class="auto-level__label">Auto level</span>
@@ -43,9 +44,29 @@
   <nav class="quick-bar" id="quick-bar" aria-label="Quick actions">
     <button type="button" class="quick-bar__btn" data-action="quick-add">Add</button>
     <button type="button" class="quick-bar__btn" data-action="quick-search">Search</button>
+    <button type="button" class="quick-bar__btn" data-action="quick-settings">Settings</button>
     <button type="button" class="quick-bar__btn" data-action="quick-reorder">Reorder</button>
     <button type="button" class="quick-bar__btn" data-action="quick-analyze">Analyze</button>
   </nav>
+
+  <section id="settings-screen" class="settings-screen" hidden aria-hidden="true">
+    <div class="settings-screen__backdrop"></div>
+    <div class="settings-screen__panel">
+      <header class="settings-screen__header">
+        <h2 class="settings-screen__title">Board Settings (All Sounds)</h2>
+        <div class="settings-screen__actions">
+          <button type="button" class="btn btn--secondary" data-action="settings-cancel">Cancel</button>
+          <button type="button" class="btn btn--primary" data-action="settings-save">Save all changes</button>
+        </div>
+      </header>
+      <div class="settings-screen__toolbar">
+        <input type="search" id="settings-search" class="field__input settings-screen__search" placeholder="Search settings rows (title, category, URL, hotkey)...">
+        <span id="settings-search-count" class="settings-screen__count" aria-live="polite"></span>
+      </div>
+      <p class="settings-screen__hint">Edit all sounds in one scrollable list. Remove a sound by checking “Delete”. Press Enter to save and continue editing.</p>
+      <div id="settings-list" class="settings-list"></div>
+    </div>
+  </section>
 
   <div id="modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" hidden aria-hidden="true">
     <div class="modal__backdrop"></div>

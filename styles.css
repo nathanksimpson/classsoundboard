@@ -833,12 +833,25 @@ body {
   }
 
   .settings-screen {
-    padding: 8px;
+    padding: 8px 8px calc(8px + 110px + env(safe-area-inset-bottom, 0px));
   }
 
   .settings-screen__panel {
     width: 100%;
     max-height: 96vh;
+  }
+
+  .settings-screen__panel,
+  .modal__panel {
+    max-height: calc(100vh - 140px - env(safe-area-inset-bottom, 0px));
+  }
+
+  .settings-list {
+    padding-bottom: calc(16px + 70px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .modal__panel {
+    padding-bottom: calc(20px + 70px + env(safe-area-inset-bottom, 0px));
   }
 
   .settings-screen__header {

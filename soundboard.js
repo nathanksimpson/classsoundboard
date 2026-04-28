@@ -939,7 +939,14 @@
     const moveDownBtn = modalForm.querySelector('[data-action="move-down"]');
     const volumeRange = modalForm.querySelector('[name="volume"]');
     const fileUrlInput = modalForm.querySelector('[name="fileUrl"]');
-    if (saveBtn) saveBtn.addEventListener('click', saveSoundFromModal);
+    modalForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      saveSoundFromModal();
+    });
+    if (saveBtn) saveBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      saveSoundFromModal();
+    });
     if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
     if (deleteBtn) deleteBtn.addEventListener('click', () => {
       const id = modalEl.dataset.soundId;
@@ -955,18 +962,6 @@
     if (fileUrlInput && Audio) fileUrlInput.addEventListener('blur', soundFromFormForDuration);
     const uploadInput = document.getElementById('upload-audio-input');
     if (uploadInput) uploadInput.addEventListener('change', function () { handleUploadAudio(uploadInput); });
-    modalForm.addEventListener('keydown', function (e) {
-      if (e.key !== 'Enter') return;
-      const target = e.target;
-      if (!target) return;
-      // Enter in the edit form should save, except when focused on buttons/ranges/file input.
-      const tag = (target.tagName || '').toLowerCase();
-      const type = (target.type || '').toLowerCase();
-      if (tag === 'button') return;
-      if (type === 'range' || type === 'file') return;
-      e.preventDefault();
-      saveSoundFromModal();
-    });
     initTrimBarDrag();
     modalEl.addEventListener('click', (e) => {
       if (e.target.classList.contains('modal__backdrop') || !e.target.closest('.modal__panel')) closeModal();

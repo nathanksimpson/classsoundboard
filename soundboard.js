@@ -14,6 +14,7 @@
   let errorIds = new Set();
   let reorderMode = false;
   const hotkeyMap = new Map();
+  const activeMomentaryKeys = new Set();
 
   const gridEl = document.getElementById('sound-grid');
   const toolbarEl = document.getElementById('toolbar');
@@ -242,9 +243,7 @@
       return;
     }
 
-    if (reorderMode) {
-      UI.renderGrid(gridEl, filtered, playingId, errorIds, onPlay, onEditSound, reorderMode, reorderSounds);
-    } else if (UI.renderGroupedGrid) {
+    if (UI.renderGroupedGrid) {
       const groups = buildGroups(filtered);
       UI.renderGroupedGrid(
         gridEl,
@@ -253,7 +252,7 @@
         errorIds,
         onPlay,
         onEditSound,
-        false,
+        reorderMode,
         null,
         {
           isCollapsed: (key) => categoryUiState && categoryUiState[String(key)] === false,
@@ -264,11 +263,12 @@
             saveCategoryUiState();
             render();
           },
-          onReorderCategory: reorderCategories
+          onReorderCategory: reorderCategories,
+          onReorderSound: reorderSoundById
         }
       );
     } else {
-      UI.renderGrid(gridEl, filtered, playingId, errorIds, onPlay, onEditSound, false, null);
+      UI.renderGrid(gridEl, filtered, playingId, errorIds, onPlay, onEditSound, reorderMode, reorderSounds);
     }
     updateReorderButton();
   }
@@ -279,6 +279,42 @@
     if (fromIndex < 0 || fromIndex >= arr.length || toIndex < 0 || toIndex >= arr.length || fromIndex === toIndex) return;
     const item = arr.splice(fromIndex, 1)[0];
     arr.splice(toIndex, 0, item);
+    saveToStorage();
+    render();
+  }
+
+  function normalizeCategoryValue(categoryKey) {
+    const key = String(categoryKey || '').trim();
+    return key === 'Uncategorized' ? '' : key;
+  }
+
+  function reorderSoundById(soundId, targetCategoryKey, beforeSoundId) {
+    if (!currentBoard || !Array.isArray(currentBoard.sounds)) return;
+    const arr = currentBoard.sounds;
+    const fromIndex = arr.findIndex((s) => s.id === soundId);
+    if (fromIndex < 0) return;
+
+    const moving = arr[fromIndex];
+    const targetCategory = normalizeCategoryValue(targetCategoryKey);
+    moving.category = targetCategory;
+
+    arr.splice(fromIndex, 1);
+
+    let insertAt = arr.length;
+    if (beforeSoundId) {
+      const toIndex = arr.findIndex((s) => s.id === beforeSoundId);
+      if (toIndex >= 0) insertAt = toIndex;
+    } else {
+      for (let i = arr.length - 1; i >= 0; i--) {
+        const cat = normalizeCategoryValue(arr[i].category || '');
+        if (cat === targetCategory) {
+          insertAt = i + 1;
+          break;
+        }
+      }
+    }
+
+    arr.splice(insertAt, 0, moving);
     saveToStorage();
     render();
   }
@@ -301,16 +337,8 @@
     }
   }
 
-  function onPlay(sound) {
+  function ensureAutoAnalysis(sound) {
     if (!sound || !Audio) return;
-    if (playingId === sound.id) {
-      if (Audio.stopSound) Audio.stopSound();
-      playingId = null;
-      render();
-      return;
-    }
-
-    // Background analysis for auto-leveling: compute and persist per-sound gain without delaying playback.
     if (Audio.getAutoLevelEnabled && Audio.getAutoLevelEnabled() && Audio.analyzeFileUrl && sound.fileUrl) {
       const has = sound.extra && typeof sound.extra.normGain === 'number' && isFinite(sound.extra.normGain);
       if (!has) {
@@ -325,7 +353,11 @@
         }).catch(function () {});
       }
     }
+  }
 
+  function startPlayback(sound) {
+    if (!sound || !Audio) return;
+    ensureAutoAnalysis(sound);
     if (Audio.stopSound) Audio.stopSound();
     playingId = null;
     render();
@@ -342,6 +374,30 @@
       }
       render();
     });
+  }
+
+  function onPlay(sound, mode) {
+    if (!sound || !Audio) return;
+    if (mode === 'momentary-stop') {
+      if (Audio.stopSound) Audio.stopSound(sound.id);
+      if (playingId === sound.id) {
+        playingId = null;
+        render();
+      }
+      return;
+    }
+    if (mode === 'momentary-start' || sound.momentary) {
+      if (playingId === sound.id) return;
+      startPlayback(sound);
+      return;
+    }
+    if (playingId === sound.id) {
+      if (Audio.stopSound) Audio.stopSound();
+      playingId = null;
+      render();
+      return;
+    }
+    startPlayback(sound);
   }
 
   function onEditSound(sound) {
@@ -396,6 +452,8 @@
       updateSpeedValue(parseFloat(modalForm.querySelector('[name="playbackRate"]').value));
       const loopCheck = modalForm.querySelector('[name="loop"]');
       if (loopCheck) loopCheck.checked = !!(sound && sound.loop);
+      const momentaryCheck = modalForm.querySelector('[name="momentary"]');
+      if (momentaryCheck) momentaryCheck.checked = !!(sound && sound.momentary);
       const startSec = sound && sound.startMs != null ? sound.startMs / 1000 : '';
       const endSec = sound && sound.endMs != null ? sound.endMs / 1000 : '';
       modalForm.querySelector('[name="startSec"]').value = startSec === '' ? '' : String(Number(startSec.toFixed(2)));
@@ -561,6 +619,7 @@
         + '  <label><span class="field__label">Start sec</span><input class="field__input" data-field="startSec" type="number" min="0" step="0.01" value="' + escapeAttr(sound.startMs != null ? (sound.startMs / 1000) : '') + '"></label>'
         + '  <label><span class="field__label">End sec</span><input class="field__input" data-field="endSec" type="number" min="0" step="0.01" value="' + escapeAttr(sound.endMs != null ? (sound.endMs / 1000) : '') + '"></label>'
         + '  <label class="field--checkbox"><input data-field="loop" type="checkbox"' + (sound.loop ? ' checked' : '') + '><span class="field__label">Loop</span></label>'
+        + '  <label class="field--checkbox"><input data-field="momentary" type="checkbox"' + (sound.momentary ? ' checked' : '') + '><span class="field__label">Momentary</span></label>'
         + '</div>';
       settingsListEl.appendChild(row);
     });
@@ -797,6 +856,7 @@
       existing.startMs = startMs;
       existing.endMs = endMs;
       existing.loop = !!(row.querySelector('[data-field="loop"]') && row.querySelector('[data-field="loop"]').checked);
+      existing.momentary = !!(row.querySelector('[data-field="momentary"]') && row.querySelector('[data-field="momentary"]').checked);
       nextSounds.push(existing);
     }
 
@@ -877,6 +937,8 @@
     const playbackRate = isNaN(rateRaw) ? 1 : Math.max(0.5, Math.min(2, rateRaw));
     const loopCheck = modalForm.querySelector('[name="loop"]');
     const loop = loopCheck ? loopCheck.checked : false;
+    const momentaryCheck = modalForm.querySelector('[name="momentary"]');
+    const momentary = momentaryCheck ? momentaryCheck.checked : false;
     const startSecRaw = modalForm.querySelector('[name="startSec"]').value.trim();
     const endSecRaw = modalForm.querySelector('[name="endSec"]').value.trim();
     const startMs = startSecRaw === '' ? null : Math.round(parseFloat(startSecRaw) * 1000);
@@ -896,6 +958,7 @@
       sound.volume = volume;
       sound.playbackRate = playbackRate;
       sound.loop = loop;
+      sound.momentary = momentary;
       sound.startMs = startMs;
       sound.endMs = endMs;
     } else {
@@ -909,6 +972,7 @@
         volume,
         playbackRate,
         loop,
+        momentary,
         startMs,
         endMs,
         hotkey: (modalForm.querySelector('[name="hotkey"]').value || '').trim(),
@@ -1089,6 +1153,8 @@
     const playbackRate = isNaN(rateRaw) ? 1 : Math.max(0.5, Math.min(2, rateRaw));
     const loopCheck = modalForm.querySelector('[name="loop"]');
     const loop = loopCheck ? loopCheck.checked : false;
+    const momentaryCheck = modalForm.querySelector('[name="momentary"]');
+    const momentary = momentaryCheck ? momentaryCheck.checked : false;
     const temp = {
       id: 'preview',
       title: 'Preview',
@@ -1096,6 +1162,7 @@
       volume: isNaN(volPct) ? 1 : Math.max(0, Math.min(1, volPct / 100)),
       playbackRate,
       loop,
+      momentary,
       startMs,
       endMs
     };
@@ -1383,7 +1450,29 @@
       const sound = key ? hotkeyMap.get(key) : null;
       if (sound) {
         e.preventDefault();
+        if (sound.momentary) {
+          if (activeMomentaryKeys.has(key)) return;
+          activeMomentaryKeys.add(key);
+          onPlay(sound, 'momentary-start');
+          return;
+        }
         onPlay(sound);
+      }
+    });
+    document.addEventListener('keyup', (e) => {
+      const key = (e.key || '').toUpperCase();
+      if (!activeMomentaryKeys.has(key)) return;
+      activeMomentaryKeys.delete(key);
+      const sound = key ? hotkeyMap.get(key) : null;
+      if (sound && sound.momentary) onPlay(sound, 'momentary-stop');
+    });
+    window.addEventListener('blur', () => {
+      if (activeMomentaryKeys.size === 0) return;
+      activeMomentaryKeys.clear();
+      if (Audio && Audio.stopSound) Audio.stopSound();
+      if (playingId != null) {
+        playingId = null;
+        render();
       }
     });
   }

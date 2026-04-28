@@ -85,11 +85,35 @@ function renderGrid(container, sounds, playState, errorIds, onPlay, onEdit, reor
   sounds.forEach((s, i) => {
     const state = playState === s.id ? 'playing' : (errorIds && errorIds.has(s.id)) ? 'error' : 'idle';
     const tile = renderTile(s, state, i, reorder);
+    const isMomentary = !!(s && s.momentary);
+
     tile.addEventListener('click', (e) => {
       e.preventDefault();
       if (reorder) return;
+      if (isMomentary) return;
       if (onPlay) onPlay(s);
     });
+
+    if (!reorder && isMomentary && onPlay) {
+      tile.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        if (e.target && e.target.closest && e.target.closest('.tile__edit')) return;
+        e.preventDefault();
+        onPlay(s, 'momentary-start');
+      });
+      const stopMomentary = (e) => {
+        if (e && e.target && e.target.closest && e.target.closest('.tile__edit')) return;
+        onPlay(s, 'momentary-stop');
+      };
+      tile.addEventListener('pointerup', stopMomentary);
+      tile.addEventListener('pointercancel', stopMomentary);
+      tile.addEventListener('lostpointercapture', stopMomentary);
+      tile.addEventListener('pointerleave', (e) => {
+        if (e.buttons === 0) return;
+        stopMomentary(e);
+      });
+    }
+
     if (onEdit) {
       const editBtn = tile.querySelector('.tile__edit');
       if (editBtn) {
@@ -167,13 +191,6 @@ function renderGroupedGrid(container, groups, playState, errorIds, onPlay, onEdi
   container.classList.add('grid-groups');
   container.textContent = '';
 
-  // In reorder mode we fall back to the flat grid renderer (drag/drop stays simple)
-  if (reorderMode) {
-    const sounds = Array.isArray(options.allSounds) ? options.allSounds : [];
-    renderGrid(container, sounds, playState, errorIds, onPlay, onEdit, reorderMode, onReorder);
-    return;
-  }
-
   const list = Array.isArray(groups) ? groups : [];
   if (list.length === 0) {
     const empty = document.createElement('p');
@@ -186,6 +203,7 @@ function renderGroupedGrid(container, groups, playState, errorIds, onPlay, onEdi
   const isCollapsed = typeof options.isCollapsed === 'function' ? options.isCollapsed : (() => false);
   const onToggleCategory = typeof options.onToggleCategory === 'function' ? options.onToggleCategory : null;
   const onReorderCategory = typeof options.onReorderCategory === 'function' ? options.onReorderCategory : null;
+  const onReorderSound = typeof options.onReorderSound === 'function' ? options.onReorderSound : null;
 
   list.forEach((g) => {
     const key = escapeText(g && g.key != null ? g.key : '');
@@ -269,7 +287,35 @@ function renderGroupedGrid(container, groups, playState, errorIds, onPlay, onEdi
     grid.className = 'grid';
     body.appendChild(grid);
 
-    renderGrid(grid, sounds, playState, errorIds, onPlay, onEdit, false, null);
+    if (reorderMode && onReorderSound) {
+      renderGrid(
+        grid,
+        sounds,
+        playState,
+        errorIds,
+        onPlay,
+        onEdit,
+        true,
+        (fromIndex, toIndex) => {
+          const moving = sounds[fromIndex];
+          const target = sounds[toIndex];
+          if (!moving || !target) return;
+          onReorderSound(moving.id, key, target.id);
+        }
+      );
+      body.addEventListener('dragover', (e) => {
+        e.preventDefault();
+      });
+      body.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const movingId = e.dataTransfer.getData('text/plain');
+        if (!movingId) return;
+        const last = sounds.length > 0 ? sounds[sounds.length - 1] : null;
+        onReorderSound(movingId, key, last ? last.id : null);
+      });
+    } else {
+      renderGrid(grid, sounds, playState, errorIds, onPlay, onEdit, false, null);
+    }
 
     section.appendChild(header);
     section.appendChild(body);

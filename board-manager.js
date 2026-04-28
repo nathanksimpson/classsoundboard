@@ -9,6 +9,7 @@ function validateSound(s) {
   if (typeof s.fileUrl !== 'string' || !s.fileUrl.trim()) return false;
   if (s.volume != null && (typeof s.volume !== 'number' || s.volume < 0 || s.volume > 1)) return false;
   if (s.playbackRate != null && (typeof s.playbackRate !== 'number' || s.playbackRate < 0.25 || s.playbackRate > 4)) return false;
+  if (s.momentary != null && typeof s.momentary !== 'boolean') return false;
   if (s.startMs != null && typeof s.startMs !== 'number') return false;
   if (s.endMs != null && typeof s.endMs !== 'number') return false;
   if (s.startMs != null && s.endMs != null && s.startMs >= s.endMs) return false;
@@ -38,6 +39,7 @@ function normalizeSound(s) {
     volume: s.volume != null ? Math.max(0, Math.min(1, Number(s.volume))) : 1,
     playbackRate: s.playbackRate != null ? Math.max(0.25, Math.min(4, Number(s.playbackRate))) : 1,
     loop: s.loop === true,
+    momentary: s.momentary === true,
     startMs: s.startMs != null ? Number(s.startMs) : null,
     endMs: s.endMs != null ? Number(s.endMs) : null,
     hotkey: s.hotkey != null ? String(s.hotkey).trim() : '',
@@ -74,6 +76,7 @@ function createDefaultSound(overrides = {}) {
     volume: 1,
     playbackRate: 1,
     loop: false,
+    momentary: false,
     startMs: null,
     endMs: null,
     hotkey: '',

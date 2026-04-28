@@ -232,6 +232,10 @@ body {
   display: none;
 }
 
+.settings-screen--open {
+  display: flex;
+}
+
 .settings-screen__backdrop {
   position: absolute;
   inset: 0;
@@ -805,7 +809,7 @@ body {
     bottom: 0;
     z-index: 40;
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(6, 1fr);
     gap: 8px;
     padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
     background: rgba(26, 26, 30, 0.96);

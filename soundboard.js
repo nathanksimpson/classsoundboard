@@ -567,13 +567,98 @@
     filterSettingsRows('');
     settingsScreenEl.hidden = false;
     settingsScreenEl.setAttribute('aria-hidden', 'false');
+    settingsScreenEl.classList.add('settings-screen--open');
     if (settingsSearchEl) settingsSearchEl.focus();
   }
 
   function closeSettingsScreen() {
     if (!settingsScreenEl) return;
+    settingsScreenEl.classList.remove('settings-screen--open');
     settingsScreenEl.hidden = true;
     settingsScreenEl.setAttribute('aria-hidden', 'true');
+  }
+
+  function parseBlerpSoundId(url) {
+    const m = String(url || '').match(/\/soundbites\/([a-zA-Z0-9]+)/);
+    return m ? m[1] : null;
+  }
+
+  function parseFirstAudioUrlFromText(text) {
+    if (!text) return null;
+    // Prefer direct audio links found in HTML/JSON blobs.
+    const direct = text.match(/https?:\/\/[^"'\\\s<>]+?\.(mp3|wav|ogg|m4a)(\?[^"'\\\s<>]*)?/i);
+    if (direct && direct[0]) return direct[0];
+    // Fallback: look for escaped URL chunks that include common audio hosts/paths.
+    const escaped = text.match(/https?:\\\/\\\/[^"'<>]+/i);
+    if (escaped && escaped[0]) {
+      return escaped[0].replace(/\\\//g, '/');
+    }
+    return null;
+  }
+
+  async function addFromBlerpUrl() {
+    if (!currentBoard) return;
+    const url = window.prompt('Paste a Blerp sound URL:', 'https://blerp.com/soundbites/');
+    if (!url) return;
+    const normalized = String(url).trim();
+    if (!/^https?:\/\//i.test(normalized)) {
+      alert('Please enter a full URL that starts with http:// or https://');
+      return;
+    }
+
+    const soundId = parseBlerpSoundId(normalized);
+    if (!soundId) {
+      alert('That does not look like a Blerp sound URL. Example: https://blerp.com/soundbites/<id>');
+      return;
+    }
+
+    const fetchTargets = [
+      normalized,
+      'https://r.jina.ai/http://' + normalized.replace(/^https?:\/\//i, '')
+    ];
+
+    let title = 'Blerp ' + soundId;
+    let fileUrl = null;
+    for (const target of fetchTargets) {
+      try {
+        const res = await fetch(target);
+        if (!res.ok) continue;
+        const text = await res.text();
+        const titleMatch = text.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i);
+        if (titleMatch && titleMatch[1]) title = titleMatch[1];
+        const parsedAudio = parseFirstAudioUrlFromText(text);
+        if (parsedAudio) {
+          fileUrl = parsedAudio;
+          break;
+        }
+      } catch (_) {}
+    }
+
+    if (!fileUrl) {
+      alert('Could not auto-extract the audio file from this Blerp page. This can happen due site protections. You can still add it manually in Add Sound.');
+      return;
+    }
+
+    const sound = Board.normalizeSound({
+      id: Board.generateId(),
+      title,
+      fileUrl,
+      imageUrl: '',
+      category: 'Blerp',
+      tags: [],
+      volume: 1,
+      playbackRate: 1,
+      loop: false,
+      startMs: null,
+      endMs: null,
+      hotkey: '',
+      color: '#6b7280',
+      extra: { source: 'blerp', blerpUrl: normalized, blerpId: soundId }
+    });
+    currentBoard.sounds.push(sound);
+    buildHotkeyMap();
+    saveToStorage();
+    render();
   }
 
   function saveAllSettingsChanges(options = {}) {
@@ -1006,6 +1091,7 @@
     const importBtn = toolbarEl.querySelector('[data-action="import"]');
     const exportBtn = toolbarEl.querySelector('[data-action="export"]');
     const downloadBtn = toolbarEl.querySelector('[data-action="download-sounds"]');
+    const blerpAddBtn = toolbarEl.querySelector('[data-action="blerp-add"]');
     const settingsBtn = toolbarEl.querySelector('[data-action="settings-open"]');
     const reorderBtn = toolbarEl.querySelector('[data-action="reorder-toggle"]');
     const analyzeAllBtn = toolbarEl.querySelector('[data-action="analyze-all"]');
@@ -1014,6 +1100,7 @@
     if (importInput) importInput.addEventListener('change', (e) => { if (e.target.files[0]) importBoard(e.target.files[0]); e.target.value = ''; });
     if (exportBtn) exportBtn.addEventListener('click', exportBoard);
     if (downloadBtn) downloadBtn.addEventListener('click', downloadAllSounds);
+    if (blerpAddBtn) blerpAddBtn.addEventListener('click', addFromBlerpUrl);
     if (settingsBtn) settingsBtn.addEventListener('click', openSettingsScreen);
     if (reorderBtn) reorderBtn.addEventListener('click', () => setReorderMode(!reorderMode));
     if (analyzeAllBtn) analyzeAllBtn.addEventListener('click', analyzeAllSounds);
@@ -1058,12 +1145,14 @@
 
     if (quickBarEl) {
       const quickAdd = quickBarEl.querySelector('[data-action="quick-add"]');
+      const quickBlerp = quickBarEl.querySelector('[data-action="quick-blerp"]');
       const quickSearch = quickBarEl.querySelector('[data-action="quick-search"]');
       const quickSettings = quickBarEl.querySelector('[data-action="quick-settings"]');
       const quickReorder = quickBarEl.querySelector('[data-action="quick-reorder"]');
       const quickAnalyze = quickBarEl.querySelector('[data-action="quick-analyze"]');
 
       if (quickAdd) quickAdd.addEventListener('click', addSound);
+      if (quickBlerp) quickBlerp.addEventListener('click', addFromBlerpUrl);
       if (quickSearch) {
         quickSearch.addEventListener('click', function () {
           if (searchInputEl) {

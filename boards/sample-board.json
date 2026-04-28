@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "id": "sample-board-1",
+  "name": "Sample Board",
+  "description": "Demo board with a few sounds",
+  "createdAt": "2025-03-04T00:00:00.000Z",
+  "updatedAt": "2025-03-04T00:00:00.000Z",
+  "sounds": [
+    {
+      "id": "sound-1",
+      "title": "Chime",
+      "fileUrl": "https://assets.mixkit.co/active_storage/sfx/2560-simple-notification-2560.mp3",
+      "imageUrl": "",
+      "category": "Alerts",
+      "tags": [],
+      "volume": 1,
+      "startMs": 0,
+      "endMs": null,
+      "hotkey": "",
+      "color": "#4a9eff",
+      "extra": {}
+    },
+    {
+      "id": "sound-2",
+      "title": "Success",
+      "fileUrl": "https://assets.mixkit.co/active_storage/sfx/2570-success-jingle-2570.mp3",
+      "imageUrl": "",
+      "category": "Alerts",
+      "tags": [],
+      "volume": 1,
+      "startMs": 0,
+      "endMs": null,
+      "hotkey": "",
+      "color": "#4caf50",
+      "extra": {}
+    },
+    {
+      "id": "sound-3",
+      "title": "Click",
+      "fileUrl": "https://assets.mixkit.co/active_storage/sfx/2566-magical-success-2566.mp3",
+      "imageUrl": "",
+      "category": "UI",
+      "tags": [],
+      "volume": 0.8,
+      "startMs": 0,
+      "endMs": null,
+      "hotkey": "",
+      "color": "#ff9800",
+      "extra": {}
+    }
+  ]
+}

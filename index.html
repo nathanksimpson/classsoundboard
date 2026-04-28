@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Soundboard</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="header">
+    <h1 id="board-name" class="header__title" title="Click to change board name">Soundboard</h1>
+    <div id="toolbar" class="toolbar">
+      <button type="button" class="btn btn--primary" data-action="add">Add Sound</button>
+      <div class="search" role="search" aria-label="Search sounds">
+        <input type="search" id="search-input" class="search__input" placeholder="Search (title or category)…" aria-label="Search sounds by title or category">
+        <button type="button" id="search-clear" class="search__clear" aria-label="Clear search" title="Clear">×</button>
+        <span class="search__count" id="search-count" aria-live="polite"></span>
+      </div>
+      <label class="btn btn--secondary">
+        Import Board
+        <input type="file" id="import-input" accept=".json" hidden>
+      </label>
+      <button type="button" class="btn btn--secondary" data-action="export">Export Board</button>
+      <button type="button" class="btn btn--secondary" data-action="download-sounds" title="Download each sound, save to a folder (or into the app), then update the board to use local copies">Download all sounds</button>
+      <label class="btn btn--secondary auto-level" title="Automatically level sound volumes">
+        <input type="checkbox" id="auto-level-toggle" class="auto-level__check" checked>
+        <span class="auto-level__label">Auto level</span>
+      </label>
+      <button type="button" class="btn btn--secondary" data-action="analyze-all" title="Analyze all sounds for consistent volume (recommended once per board)">Analyze all</button>
+      <button type="button" class="btn btn--secondary" id="reorder-toggle" data-action="reorder-toggle" title="Toggle reorder mode to drag and drop tiles">Reorder</button>
+      <span class="toolbar__status" id="download-status" aria-live="polite"></span>
+    </div>
+    <div class="header__global-volume" id="global-volume-wrap" title="Master volume">
+      <label class="global-volume__label"><span id="global-volume-label">Volume 100%</span></label>
+      <input type="range" id="global-volume" class="global-volume__slider" min="0" max="100" value="100">
+    </div>
+  </header>
+
+  <main class="main">
+    <div id="sound-grid" class="grid" role="list"></div>
+  </main>
+
+  <nav class="quick-bar" id="quick-bar" aria-label="Quick actions">
+    <button type="button" class="quick-bar__btn" data-action="quick-add">Add</button>
+    <button type="button" class="quick-bar__btn" data-action="quick-search">Search</button>
+    <button type="button" class="quick-bar__btn" data-action="quick-reorder">Reorder</button>
+    <button type="button" class="quick-bar__btn" data-action="quick-analyze">Analyze</button>
+  </nav>
+
+  <div id="modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" hidden aria-hidden="true">
+    <div class="modal__backdrop"></div>
+    <div class="modal__panel">
+      <h2 id="modal-title" class="modal__title">Edit Sound</h2>
+      <p id="modal-error" class="modal__error" aria-live="polite"></p>
+      <form id="modal-form" class="modal__form">
+        <label class="field">
+          <span class="field__label">Title</span>
+          <input type="text" name="title" class="field__input" required>
+        </label>
+        <label class="field">
+          <span class="field__label">Audio URL</span>
+          <input type="url" name="fileUrl" class="field__input" placeholder="https://... or upload below">
+        </label>
+        <label class="field">
+          <span class="field__label">Or upload your own file (MP3, WAV, etc.)</span>
+          <input type="file" id="upload-audio-input" name="audioFile" class="field__input" accept="audio/*">
+          <span class="field__hint" id="uploaded-audio-hint" aria-live="polite"></span>
+        </label>
+        <label class="field">
+          <span class="field__label">Image URL (optional)</span>
+          <input type="url" name="imageUrl" class="field__input" placeholder="https://...">
+        </label>
+        <label class="field">
+          <span class="field__label">Category</span>
+          <input type="text" name="category" class="field__input">
+        </label>
+        <label class="field">
+          <span class="field__label">Hotkey (e.g. Q)</span>
+          <input type="text" name="hotkey" class="field__input" maxlength="1" placeholder="Q">
+        </label>
+        <label class="field">
+          <span class="field__label">Volume <span id="volume-percent">100%</span></span>
+          <input type="range" name="volume" class="field__input field__range" min="0" max="100" value="100" data-volume-percent="volume-percent">
+        </label>
+        <label class="field">
+          <span class="field__label">Playback speed <span id="speed-value">1.0</span>×</span>
+          <input type="range" name="playbackRate" class="field__input field__range" min="0.5" max="2" step="0.1" value="1">
+        </label>
+        <label class="field field--checkbox">
+          <input type="checkbox" name="loop" value="1">
+          <span class="field__label">Loop (repeat until stopped)</span>
+        </label>
+        <div class="field trim-field">
+          <span class="field__label">Playback range</span>
+          <p class="field__hint" id="duration-hint"></p>
+          <div id="trim-bar-wrap" class="trim-bar-wrap" aria-hidden="true">
+            <div class="trim-bar" id="trim-bar" role="group" aria-label="Set start and end of playback">
+              <div class="trim-bar__track"></div>
+              <div class="trim-bar__fill" id="trim-bar-fill"></div>
+              <button type="button" class="trim-bar__handle trim-bar__handle--start" id="trim-handle-start" aria-label="Start time"></button>
+              <button type="button" class="trim-bar__handle trim-bar__handle--end" id="trim-handle-end" aria-label="End time"></button>
+            </div>
+            <div class="trim-bar__labels">
+              <span id="trim-start-label">0s</span>
+              <span id="trim-end-label">— s</span>
+            </div>
+          </div>
+          <input type="hidden" name="startSec" id="startSec-input">
+          <input type="hidden" name="endSec" id="endSec-input">
+        </div>
+        <div class="modal__actions modal__actions--wrap">
+          <button type="button" class="btn btn--secondary" data-action="preview">Preview</button>
+          <button type="button" class="btn btn--secondary" data-action="move-up" title="Move sound up">Move up</button>
+          <button type="button" class="btn btn--secondary" data-action="move-down" title="Move sound down">Move down</button>
+          <button type="button" class="btn btn--primary" data-action="save">Save</button>
+          <button type="button" class="btn btn--secondary" data-action="cancel">Cancel</button>
+          <button type="button" class="btn btn--danger" data-action="delete">Delete</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" crossorigin="anonymous"></script>
+  <script src="storage.js"></script>
+  <script src="local-audio.js"></script>
+  <script src="audio-engine.js"></script>
+  <script src="board-manager.js"></script>
+  <script src="ui-renderer.js"></script>
+  <script src="soundboard.js"></script>
+</body>
+</html>

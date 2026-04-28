@@ -95,7 +95,7 @@
         </label>
         <label class="field">
           <span class="field__label">Category</span>
-          <input type="text" name="category" class="field__input">
+          <input type="text" name="category" class="field__input" list="category-options">
         </label>
         <label class="field">
           <span class="field__label">Hotkey (e.g. Q)</span>
@@ -148,6 +148,7 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" crossorigin="anonymous"></script>
+  <datalist id="category-options"></datalist>
   <script src="storage.js"></script>
   <script src="local-audio.js"></script>
   <script src="audio-engine.js"></script>

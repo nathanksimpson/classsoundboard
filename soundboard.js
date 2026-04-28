@@ -36,6 +36,7 @@
   const settingsListEl = document.getElementById('settings-list');
   const settingsSearchEl = document.getElementById('settings-search');
   const settingsSearchCountEl = document.getElementById('settings-search-count');
+  const categoryOptionsEl = document.getElementById('category-options');
 
   function getBoardJsonPath() {
     const base = window.location.pathname.replace(/\/[^/]*$/, '') || '/';
@@ -207,6 +208,7 @@
     categoryUiState = loadCategoryUiState();
     categoryOrder = loadCategoryOrder();
     buildHotkeyMap();
+    refreshCategorySuggestions();
     render();
     initBoardTitle();
     if (Audio && board.sounds && board.sounds.length) {
@@ -280,7 +282,7 @@
     return key === 'Uncategorized' ? '' : key;
   }
 
-  function reorderSoundById(soundId, targetCategoryKey, beforeSoundId) {
+  function reorderSoundById(soundId, targetCategoryKey, beforeSoundId, place) {
     if (!currentBoard || !Array.isArray(currentBoard.sounds)) return;
     const arr = currentBoard.sounds;
     const fromIndex = arr.findIndex((s) => s.id === soundId);
@@ -295,7 +297,7 @@
     let insertAt = arr.length;
     if (beforeSoundId) {
       const toIndex = arr.findIndex((s) => s.id === beforeSoundId);
-      if (toIndex >= 0) insertAt = toIndex;
+      if (toIndex >= 0) insertAt = place === 'after' ? toIndex + 1 : toIndex;
     } else {
       for (let i = arr.length - 1; i >= 0; i--) {
         const cat = normalizeCategoryValue(arr[i].category || '');
@@ -308,6 +310,7 @@
 
     arr.splice(insertAt, 0, moving);
     saveToStorage();
+    refreshCategorySuggestions();
     render();
   }
 
@@ -405,6 +408,22 @@
       currentBoard.updatedAt = new Date().toISOString();
       Storage.saveBoard(currentBoard);
     }
+  }
+
+  function refreshCategorySuggestions() {
+    if (!categoryOptionsEl || !currentBoard || !Array.isArray(currentBoard.sounds)) return;
+    const set = new Set();
+    currentBoard.sounds.forEach((s) => {
+      const category = (s && s.category ? String(s.category) : '').trim();
+      if (category) set.add(category);
+    });
+    const categories = Array.from(set).sort((a, b) => a.localeCompare(b));
+    categoryOptionsEl.textContent = '';
+    categories.forEach((name) => {
+      const opt = document.createElement('option');
+      opt.value = name;
+      categoryOptionsEl.appendChild(opt);
+    });
   }
 
   function addSound() {
@@ -607,7 +626,7 @@
         + '  <label><span class="field__label">Title</span><input class="field__input" data-field="title" type="text" value="' + escapeAttr(sound.title || '') + '"></label>'
         + '  <label><span class="field__label">Audio URL</span><input class="field__input" data-field="fileUrl" type="text" value="' + escapeAttr(sound.fileUrl || '') + '"></label>'
         + '  <label><span class="field__label">Image URL</span><input class="field__input" data-field="imageUrl" type="text" value="' + escapeAttr(sound.imageUrl || '') + '"></label>'
-        + '  <label><span class="field__label">Category</span><input class="field__input" data-field="category" type="text" value="' + escapeAttr(sound.category || '') + '"></label>'
+        + '  <label><span class="field__label">Category</span><input class="field__input" data-field="category" type="text" list="category-options" value="' + escapeAttr(sound.category || '') + '"></label>'
         + '  <label><span class="field__label">Hotkey</span><input class="field__input" data-field="hotkey" maxlength="1" type="text" value="' + escapeAttr(sound.hotkey || '') + '"></label>'
         + '  <label><span class="field__label">Volume %</span><input class="field__input" data-field="volume" type="number" min="0" max="100" step="1" value="' + escapeAttr(Math.round((sound.volume != null ? sound.volume : 1) * 100)) + '"></label>'
         + '  <label><span class="field__label">Speed</span><input class="field__input" data-field="playbackRate" type="number" min="0.5" max="2" step="0.1" value="' + escapeAttr(sound.playbackRate != null ? sound.playbackRate : 1) + '"></label>'
@@ -858,6 +877,7 @@
     currentBoard.sounds = nextSounds;
     buildHotkeyMap();
     saveToStorage();
+    refreshCategorySuggestions();
     if (closeAfterSave) closeSettingsScreen();
     if (!closeAfterSave && downloadStatus) {
       downloadStatus.textContent = 'Settings saved.';
@@ -978,6 +998,7 @@
     }
     saveToStorage();
     buildHotkeyMap();
+    refreshCategorySuggestions();
     closeModal();
     render();
   }

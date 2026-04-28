@@ -300,7 +300,8 @@ function renderGroupedGrid(container, groups, playState, errorIds, onPlay, onEdi
           const moving = sounds[fromIndex];
           const target = sounds[toIndex];
           if (!moving || !target) return;
-          onReorderSound(moving.id, key, target.id);
+          const place = fromIndex < toIndex ? 'after' : 'before';
+          onReorderSound(moving.id, key, target.id, place);
         }
       );
       body.addEventListener('dragover', (e) => {
@@ -311,7 +312,7 @@ function renderGroupedGrid(container, groups, playState, errorIds, onPlay, onEdi
         const movingId = e.dataTransfer.getData('text/plain');
         if (!movingId) return;
         const last = sounds.length > 0 ? sounds[sounds.length - 1] : null;
-        onReorderSound(movingId, key, last ? last.id : null);
+        onReorderSound(movingId, key, last ? last.id : null, 'after');
       });
     } else {
       renderGrid(grid, sounds, playState, errorIds, onPlay, onEdit, false, null);

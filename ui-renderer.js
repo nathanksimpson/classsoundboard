@@ -251,7 +251,7 @@ function renderGroupedGrid(container, groups, playState, errorIds, onPlay, onEdi
       });
     }
 
-    if (onReorderCategory) {
+    if (onReorderCategory && !reorderMode) {
       header.setAttribute('draggable', 'true');
       header.classList.add('category__header--draggable');
       header.addEventListener('dragstart', (e) => {

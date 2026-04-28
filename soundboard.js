@@ -140,14 +140,6 @@
       return a.localeCompare(b);
     });
 
-    // Keep persisted order clean and aligned with categories that still exist.
-    const keySet = new Set(keys);
-    const normalizedOrder = (categoryOrder || []).filter((k) => keySet.has(k));
-    keys.forEach((k) => {
-      if (!normalizedOrder.includes(k)) normalizedOrder.push(k);
-    });
-    categoryOrder = normalizedOrder;
-
     return keys.map((k) => ({ key: k, label: k, sounds: map.get(k) }));
   }
 
@@ -355,12 +347,15 @@
     }
   }
 
-  function startPlayback(sound) {
+  function startPlayback(sound, options = {}) {
     if (!sound || !Audio) return;
+    const squelch = options.squelch !== false;
     ensureAutoAnalysis(sound);
-    if (Audio.stopSound) Audio.stopSound();
-    playingId = null;
-    render();
+    if (squelch) {
+      if (Audio.stopSound) Audio.stopSound();
+      playingId = null;
+      render();
+    }
     playingId = sound.id;
     render();
     Audio.playSound(sound).then((played) => {
@@ -388,7 +383,7 @@
     }
     if (mode === 'momentary-start' || sound.momentary) {
       if (playingId === sound.id) return;
-      startPlayback(sound);
+      startPlayback(sound, { squelch: false });
       return;
     }
     if (playingId === sound.id) {

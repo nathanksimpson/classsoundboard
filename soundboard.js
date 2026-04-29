@@ -19,6 +19,7 @@
   const gridEl = document.getElementById('sound-grid');
   const toolbarEl = document.getElementById('toolbar');
   const importInput = document.getElementById('import-input');
+  const importDropzoneEl = document.getElementById('import-dropzone');
   const modalEl = document.getElementById('modal');
   const modalForm = document.getElementById('modal-form');
   const modalError = document.getElementById('modal-error');
@@ -69,6 +70,8 @@
       'toolbar.group.board': 'Board File',
       'toolbar.import': 'Import Board',
       'toolbar.export': 'Export Board',
+      'toolbar.importDropzone': 'Drop .json board file here (or click)',
+      'toolbar.importDropzoneTitle': 'Drop a .json board file here, or click to choose one',
       'toolbar.group.audio': 'Audio Tools',
       'toolbar.downloadAll': 'Download all sounds',
       'toolbar.downloadAllTitle': 'Download each sound, save to a folder (or into the app), then update the board to use local copies',
@@ -125,6 +128,7 @@
       'status.analysisUnavailable': 'Analysis not available.',
       'status.analyzingProgress': 'Analyzing {current}/{total}…',
       'status.analyzeComplete': 'Analyze complete.',
+      'status.invalidImportFile': 'Please drop a valid .json board file.',
       'board.defaultName': 'Soundboard',
       'board.renameTitle': 'Click to change board name',
       'ui.dragToReorderPrefix': 'Drag to reorder',
@@ -146,6 +150,8 @@
       'toolbar.group.board': '보드 파일',
       'toolbar.import': '보드 가져오기',
       'toolbar.export': '보드 내보내기',
+      'toolbar.importDropzone': '.json 보드 파일을 여기에 드롭하세요 (또는 클릭)',
+      'toolbar.importDropzoneTitle': '.json 보드 파일을 여기에 드롭하거나 클릭해 선택하세요',
       'toolbar.group.audio': '오디오 도구',
       'toolbar.downloadAll': '모든 사운드 다운로드',
       'toolbar.downloadAllTitle': '각 사운드를 다운로드하여 폴더(또는 앱)로 저장 후 로컬 파일로 업데이트',
@@ -202,6 +208,7 @@
       'status.analysisUnavailable': '분석 기능을 사용할 수 없습니다.',
       'status.analyzingProgress': '{current}/{total} 분석 중…',
       'status.analyzeComplete': '분석 완료.',
+      'status.invalidImportFile': '올바른 .json 보드 파일을 드롭해 주세요.',
       'board.defaultName': '사운드보드',
       'board.renameTitle': '클릭하여 보드 이름 변경',
       'ui.dragToReorderPrefix': '드래그하여 순서 변경',
@@ -2012,6 +2019,45 @@
     if (addBtn) addBtn.addEventListener('click', addSound);
     if (importBtn && importInput) importBtn.addEventListener('click', () => importInput.click());
     if (importInput) importInput.addEventListener('change', (e) => { if (e.target.files[0]) importBoard(e.target.files[0]); e.target.value = ''; });
+    if (importDropzoneEl && importInput) {
+      importDropzoneEl.addEventListener('click', function () {
+        importInput.click();
+      });
+      importDropzoneEl.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          importInput.click();
+        }
+      });
+      ['dragenter', 'dragover'].forEach((evtName) => {
+        importDropzoneEl.addEventListener(evtName, function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          importDropzoneEl.classList.add('import-dropzone--active');
+        });
+      });
+      ['dragleave', 'dragend', 'drop'].forEach((evtName) => {
+        importDropzoneEl.addEventListener(evtName, function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          importDropzoneEl.classList.remove('import-dropzone--active');
+        });
+      });
+      importDropzoneEl.addEventListener('drop', function (e) {
+        const files = e.dataTransfer && e.dataTransfer.files ? Array.from(e.dataTransfer.files) : [];
+        const file = files.find((f) => /\.json$/i.test(f.name || '')) || files[0];
+        if (!file || !/\.json$/i.test(file.name || '')) {
+          if (downloadStatus) {
+            downloadStatus.textContent = t('status.invalidImportFile');
+            setTimeout(function () {
+              if (downloadStatus) downloadStatus.textContent = '';
+            }, 2200);
+          }
+          return;
+        }
+        importBoard(file);
+      });
+    }
     if (exportBtn) exportBtn.addEventListener('click', exportBoard);
     if (downloadBtn) downloadBtn.addEventListener('click', downloadAllSounds);
     if (webAddBtn) webAddBtn.addEventListener('click', addFromWebUrl);

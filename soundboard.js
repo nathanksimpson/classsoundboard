@@ -260,6 +260,30 @@
     return signature;
   }
 
+  function captureHotkeyFromInputKeydown(e, onEnter) {
+    if (!e) return;
+    const key = e.key || '';
+    if (key === 'Tab') return;
+    if (key === 'Enter') {
+      e.preventDefault();
+      if (typeof onEnter === 'function') onEnter();
+      return;
+    }
+    if (key === 'Backspace' || key === 'Delete') {
+      e.preventDefault();
+      if (e.target) e.target.value = '';
+      return;
+    }
+    if (key === 'Escape') {
+      if (e.target && typeof e.target.blur === 'function') e.target.blur();
+      return;
+    }
+    const signature = getHotkeySignatureFromKeyboardEvent(e);
+    if (!signature) return;
+    e.preventDefault();
+    if (e.target) e.target.value = signature;
+  }
+
   function clearSettingsFeedback() {
     if (!settingsFeedbackEl) return;
     settingsFeedbackEl.textContent = '';
@@ -340,7 +364,7 @@
       + '  <label><span class="field__label">Audio URL</span><input class="field__input" data-field="fileUrl" type="text" value="' + escapeAttr(sound.fileUrl || '') + '"></label>'
       + '  <label><span class="field__label">Image URL</span><input class="field__input" data-field="imageUrl" type="text" value="' + escapeAttr(sound.imageUrl || '') + '"></label>'
       + '  <label><span class="field__label">Category</span><input class="field__input" data-field="category" type="text" list="category-options" value="' + escapeAttr(sound.category || '') + '"></label>'
-      + '  <label><span class="field__label">Hotkey (examples: Q, Shift+., Ctrl+Alt+P)</span><input class="field__input" data-field="hotkey" type="text" value="' + escapeAttr(normalizeHotkeyInput(sound.hotkey || '')) + '"></label>'
+      + '  <label><span class="field__label">Hotkey (press combo, e.g. Q, Shift+., Ctrl+Alt+P)</span><input class="field__input" data-field="hotkey" type="text" value="' + escapeAttr(normalizeHotkeyInput(sound.hotkey || '')) + '"></label>'
       + '  <label><span class="field__label">Volume %</span><input class="field__input" data-field="volume" type="number" min="0" max="100" step="1" value="' + escapeAttr(Math.round((sound.volume != null ? sound.volume : 1) * 100)) + '"></label>'
       + '  <label><span class="field__label">Speed</span><input class="field__input" data-field="playbackRate" type="number" min="0.5" max="2" step="0.1" value="' + escapeAttr(sound.playbackRate != null ? sound.playbackRate : 1) + '"></label>'
       + '  <label><span class="field__label">Start sec</span><input class="field__input" data-field="startSec" type="number" min="0" step="0.01" value="' + escapeAttr(sound.startMs != null ? (sound.startMs / 1000) : '') + '"></label>'
@@ -458,6 +482,21 @@
   function toggleHotkeyOnlyFilter() {
     showHotkeyOnly = !showHotkeyOnly;
     render();
+  }
+
+  function bindTapAndClick(button, handler) {
+    if (!button || typeof handler !== 'function') return;
+    let handledByTouch = false;
+    button.addEventListener('touchstart', function (e) {
+      if (e && e.cancelable) e.preventDefault();
+      handledByTouch = true;
+      handler();
+      setTimeout(function () { handledByTouch = false; }, 300);
+    }, { passive: false });
+    button.addEventListener('click', function () {
+      if (handledByTouch) return;
+      handler();
+    });
   }
 
   function loadInitialBoard() {
@@ -1714,7 +1753,7 @@
     if (webAddBtn) webAddBtn.addEventListener('click', addFromWebUrl);
     if (settingsBtn) settingsBtn.addEventListener('click', openSettingsScreen);
     if (reorderBtn) reorderBtn.addEventListener('click', () => setReorderMode(!reorderMode));
-    if (hotkeyOnlyBtn) hotkeyOnlyBtn.addEventListener('click', toggleHotkeyOnlyFilter);
+    if (hotkeyOnlyBtn) bindTapAndClick(hotkeyOnlyBtn, toggleHotkeyOnlyFilter);
     if (analyzeAllBtn) analyzeAllBtn.addEventListener('click', analyzeAllSounds);
     if (globalVolumeEl && Audio) {
       globalVolumeEl.addEventListener('input', function () {
@@ -1774,7 +1813,7 @@
           }
         });
       }
-      if (quickHotkeyOnly) quickHotkeyOnly.addEventListener('click', toggleHotkeyOnlyFilter);
+      if (quickHotkeyOnly) bindTapAndClick(quickHotkeyOnly, toggleHotkeyOnlyFilter);
       if (quickReorder) {
         quickReorder.addEventListener('click', function () {
           setReorderMode(!reorderMode);
@@ -1816,13 +1855,19 @@
         if (t && t.matches && t.matches('[data-field]')) setSettingsDirty(true);
         if (t && t.matches && t.matches('[data-field="hotkey"]')) {
           const normalized = normalizeHotkeyInput(t.value);
-          if (normalized) t.value = normalized;
+          t.value = normalized;
         }
       });
       settingsScreenEl.addEventListener('keydown', function (e) {
         trapFocusInSettingsScreen(e);
+        const t = e.target;
+        if (t && t.matches && t.matches('[data-field="hotkey"]')) {
+          captureHotkeyFromInputKeydown(e, function () {
+            saveAllSettingsChanges({ closeAfterSave: false });
+          });
+          if (e.defaultPrevented) return;
+        }
         if (e.key === 'Enter') {
-          const t = e.target;
           if (t && (t.tagName || '').toLowerCase() === 'textarea') return;
           const type = (t && t.type ? String(t.type) : '').toLowerCase();
           if (type === 'button' || type === 'checkbox' || type === 'search') return;
@@ -1912,9 +1957,12 @@
     if (speedRange) speedRange.addEventListener('input', function () { updateSpeedValue(parseFloat(speedRange.value)); });
     if (fileUrlInput && Audio) fileUrlInput.addEventListener('blur', soundFromFormForDuration);
     if (hotkeyInput) {
+      hotkeyInput.addEventListener('keydown', function (e) {
+        captureHotkeyFromInputKeydown(e, saveSoundFromModal);
+      });
       hotkeyInput.addEventListener('change', function () {
         const normalized = normalizeHotkeyInput(hotkeyInput.value);
-        if (normalized) hotkeyInput.value = normalized;
+        hotkeyInput.value = normalized;
       });
     }
     const uploadInput = document.getElementById('upload-audio-input');

@@ -443,6 +443,22 @@
     render();
   }
 
+  function syncOverlayBodyLock() {
+    if (!document || !document.body) return;
+    const modalOpen = !!(modalEl && !modalEl.hidden);
+    const settingsOpen = !!(settingsScreenEl && !settingsScreenEl.hidden);
+    document.body.classList.toggle('body--overlay-open', modalOpen || settingsOpen);
+  }
+
+  function focusWithoutScroll(el) {
+    if (!el || typeof el.focus !== 'function') return;
+    try {
+      el.focus({ preventScroll: true });
+    } catch (_) {
+      el.focus();
+    }
+  }
+
   function openModal(sound) {
     if (!modalEl || !modalForm) return;
     modalEl.dataset.soundId = sound ? sound.id : '';
@@ -482,7 +498,14 @@
     updateTrimBar(sound && sound.fileUrl && Audio && Audio.getDurationSeconds ? Audio.getDurationSeconds(sound.fileUrl) : null);
     modalEl.classList.add('modal--open');
     modalEl.hidden = false;
+    syncOverlayBodyLock();
     if (modalError) modalError.textContent = '';
+    const titleInput = modalForm.querySelector('[name="title"]');
+    if (titleInput && window && window.requestAnimationFrame) {
+      window.requestAnimationFrame(() => {
+        if (!modalEl.hidden) focusWithoutScroll(titleInput);
+      });
+    }
   }
 
   function updateTrimBar(durationSecArg) {
@@ -598,6 +621,7 @@
       modalEl.classList.remove('modal--open');
       modalEl.hidden = true;
     }
+    syncOverlayBodyLock();
   }
 
   function openSettingsScreen() {
@@ -641,7 +665,8 @@
     settingsScreenEl.hidden = false;
     settingsScreenEl.setAttribute('aria-hidden', 'false');
     settingsScreenEl.classList.add('settings-screen--open');
-    if (settingsSearchEl) settingsSearchEl.focus();
+    syncOverlayBodyLock();
+    focusWithoutScroll(settingsSearchEl);
   }
 
   function closeSettingsScreen() {
@@ -649,6 +674,7 @@
     settingsScreenEl.classList.remove('settings-screen--open');
     settingsScreenEl.hidden = true;
     settingsScreenEl.setAttribute('aria-hidden', 'true');
+    syncOverlayBodyLock();
   }
 
   function parseBlerpSoundId(url) {

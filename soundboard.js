@@ -41,6 +41,8 @@
   const settingsLoadMoreBtn = document.getElementById('settings-load-more');
   const settingsRenderedCountEl = document.getElementById('settings-rendered-count');
   const settingsClearSearchBtn = document.getElementById('settings-clear-search');
+  const languageSelectEl = document.getElementById('language-select');
+  const helpScreenEl = document.getElementById('help-screen');
 
   function getBoardJsonPath() {
     const base = window.location.pathname.replace(/\/[^/]*$/, '') || '/';
@@ -50,7 +52,165 @@
   const CATEGORY_UI_KEY_PREFIX = 'soundboard-category-state:';
   const CATEGORY_ORDER_KEY_PREFIX = 'soundboard-category-order:';
   const AUTO_LEVEL_KEY = 'soundboard-auto-level';
+  const LANGUAGE_KEY = 'soundboard-language';
   const SETTINGS_BATCH_SIZE = 80;
+  const I18N = {
+    en: {
+      'header.hint': 'Tip: click the board name to rename it.',
+      'toolbar.group.create': 'Create/Edit',
+      'toolbar.add': 'Add Sound',
+      'toolbar.webAdd': 'Add Web Sound',
+      'toolbar.webAddTitle': 'Paste a Blerp or YouTube link to auto-import',
+      'toolbar.manageAll': 'Manage All Sounds',
+      'toolbar.manageAllTitle': 'Edit all sounds in one long list',
+      'toolbar.reorder': 'Reorder',
+      'toolbar.reorderTitle': 'Toggle reorder mode to drag and drop tiles',
+      'toolbar.help': 'How to Use',
+      'toolbar.group.board': 'Board File',
+      'toolbar.import': 'Import Board',
+      'toolbar.export': 'Export Board',
+      'toolbar.group.audio': 'Audio Tools',
+      'toolbar.downloadAll': 'Download all sounds',
+      'toolbar.downloadAllTitle': 'Download each sound, save to a folder (or into the app), then update the board to use local copies',
+      'toolbar.autoLevel': 'Auto level',
+      'toolbar.analyzeAll': 'Analyze all',
+      'toolbar.analyzeAllTitle': 'Analyze all sounds for consistent volume (recommended once per board)',
+      'toolbar.group.search': 'Search',
+      'toolbar.group.language': 'Language',
+      'toolbar.language': 'Language',
+      'search.placeholder': 'Search (title or category)…',
+      'search.clear': 'Clear',
+      'quick.add': 'Add',
+      'quick.web': 'Web',
+      'quick.search': 'Search',
+      'quick.hotkeys': 'Hotkeys',
+      'quick.settings': 'Settings',
+      'quick.help': 'Help',
+      'quick.reorder': 'Reorder',
+      'quick.analyze': 'Analyze',
+      'help.title': 'How to Use',
+      'help.close': 'Close',
+      'help.enHeader': 'English Guide',
+      'help.enIntro': 'Use this soundboard to quickly play, organize, and manage sounds.',
+      'help.en1': 'Add sounds with Add Sound or Add Web Sound.',
+      'help.en2': 'Edit a tile with the pencil icon (or right-click on desktop).',
+      'help.en3': 'Assign hotkeys like Q, Shift+A, or Shift+.',
+      'help.en4': 'Use Hotkeys only to show only sounds with hotkeys.',
+      'help.en5': 'Use Reorder to drag sounds/categories into new positions.',
+      'help.en6': 'Use Manage All Sounds for bulk editing and saving.',
+      'help.hotkeysHeader': 'Useful Hotkeys for default sounds',
+      'help.hk1': '3 - Mario Kart 3-2-1 Go',
+      'help.hk2': 'X - Wrong answer buzzer',
+      'help.hk3': 'R - Great!',
+      'help.hk4': 'A - Anime Wow',
+      'help.hk5': '9 - Sad music',
+      'help.hk6': 'P - Perfect',
+      'help.hk7': 'M - Stop, wait a minute',
+      'help.hk8': 'V - Victory sound',
+      'help.hk9': '1 - One more Time',
+      'help.koHeader': 'Korean Guide',
+      'help.koIntro': 'Korean instructions are shown below for bilingual users.',
+      'help.ko1': 'You can switch app language at any time.',
+      'help.ko2': 'Use this section as a Korean reference.',
+      'help.ko3': 'Hotkeys support combos like Shift+A and Shift+.',
+      'help.ko4': 'Use Hotkeys only to filter assigned sounds.',
+      'help.ko5': 'Use Reorder to drag and reorder.',
+      'help.ko6': 'Use Manage All Sounds for bulk edits.',
+      'hotkey.only.on': 'Hotkeys only: ON',
+      'hotkey.only.off': 'Hotkeys only',
+      'search.hotkeysSuffix': ' hotkeys',
+      'settings.loadedCount': 'Loaded {loaded} of {total} rows',
+      'label.volume': 'Volume {pct}%',
+      'status.noSoundsToAnalyze': 'No sounds to analyze.',
+      'status.analysisUnavailable': 'Analysis not available.',
+      'status.analyzingProgress': 'Analyzing {current}/{total}…',
+      'status.analyzeComplete': 'Analyze complete.',
+      'board.defaultName': 'Soundboard',
+      'board.renameTitle': 'Click to change board name',
+      'ui.dragToReorderPrefix': 'Drag to reorder',
+      'ui.playPrefix': 'Play',
+      'ui.noSounds': 'No sounds. Add a sound or import a board.',
+      'ui.noSearchMatches': 'No sounds match your search.'
+    },
+    ko: {
+      'header.hint': '팁: 보드 이름을 클릭하면 이름을 변경할 수 있습니다.',
+      'toolbar.group.create': '생성/편집',
+      'toolbar.add': '사운드 추가',
+      'toolbar.webAdd': '웹 사운드 추가',
+      'toolbar.webAddTitle': 'Blerp 또는 YouTube 링크를 붙여넣어 자동 가져오기',
+      'toolbar.manageAll': '전체 사운드 관리',
+      'toolbar.manageAllTitle': '긴 목록에서 모든 사운드 편집',
+      'toolbar.reorder': '순서 변경',
+      'toolbar.reorderTitle': '순서 변경 모드를 켜고 타일을 드래그하세요',
+      'toolbar.help': '사용 방법',
+      'toolbar.group.board': '보드 파일',
+      'toolbar.import': '보드 가져오기',
+      'toolbar.export': '보드 내보내기',
+      'toolbar.group.audio': '오디오 도구',
+      'toolbar.downloadAll': '모든 사운드 다운로드',
+      'toolbar.downloadAllTitle': '각 사운드를 다운로드하여 폴더(또는 앱)로 저장 후 로컬 파일로 업데이트',
+      'toolbar.autoLevel': '자동 레벨',
+      'toolbar.analyzeAll': '전체 분석',
+      'toolbar.analyzeAllTitle': '모든 사운드를 분석해 볼륨을 맞춥니다(보드당 1회 권장)',
+      'toolbar.group.search': '검색',
+      'toolbar.group.language': '언어',
+      'toolbar.language': '언어',
+      'search.placeholder': '검색 (제목 또는 카테고리)…',
+      'search.clear': '지우기',
+      'quick.add': '추가',
+      'quick.web': '웹',
+      'quick.search': '검색',
+      'quick.hotkeys': '단축키',
+      'quick.settings': '설정',
+      'quick.help': '도움말',
+      'quick.reorder': '정렬',
+      'quick.analyze': '분석',
+      'help.title': '사용 방법',
+      'help.close': '닫기',
+      'help.enHeader': 'English Guide',
+      'help.enIntro': 'For English instructions, read this section.',
+      'help.en1': 'Add sounds with Add Sound or Add Web Sound.',
+      'help.en2': 'Edit a tile with the pencil icon (or right-click on desktop).',
+      'help.en3': 'Assign hotkeys like Q, Shift+A, or Shift+.',
+      'help.en4': 'Use Hotkeys only to show only sounds with hotkeys.',
+      'help.en5': 'Use Reorder to drag sounds/categories into new positions.',
+      'help.en6': 'Use Manage All Sounds for bulk editing and saving.',
+      'help.hotkeysHeader': '기본 사운드 유용한 단축키',
+      'help.hk1': '3 - Mario Kart 3-2-1 Go',
+      'help.hk2': 'X - 오답 버저',
+      'help.hk3': 'R - Great!',
+      'help.hk4': 'A - Anime Wow',
+      'help.hk5': '9 - 슬픈 음악',
+      'help.hk6': 'P - Perfect',
+      'help.hk7': 'M - Stop, wait a minute',
+      'help.hk8': 'V - 승리 사운드',
+      'help.hk9': '1 - One more Time',
+      'help.koHeader': '한국어 안내',
+      'help.koIntro': '이 사운드보드는 사운드를 빠르게 재생하고 정리/관리할 수 있도록 만들어졌습니다.',
+      'help.ko1': 'Add Sound 또는 Add Web Sound로 사운드를 추가하세요.',
+      'help.ko2': '타일의 연필 아이콘(PC는 우클릭)으로 편집할 수 있습니다.',
+      'help.ko3': 'Q, Shift+A, Shift+. 같은 단축키를 지정할 수 있습니다.',
+      'help.ko4': 'Hotkeys only로 단축키가 있는 사운드만 볼 수 있습니다.',
+      'help.ko5': 'Reorder에서 드래그하여 사운드/카테고리 순서를 바꿀 수 있습니다.',
+      'help.ko6': 'Manage All Sounds에서 전체 일괄 편집 후 저장할 수 있습니다.',
+      'hotkey.only.on': '단축키만 보기: 켜짐',
+      'hotkey.only.off': '단축키만',
+      'search.hotkeysSuffix': ' 단축키',
+      'settings.loadedCount': '{total}개 중 {loaded}개 로드됨',
+      'label.volume': '볼륨 {pct}%',
+      'status.noSoundsToAnalyze': '분석할 사운드가 없습니다.',
+      'status.analysisUnavailable': '분석 기능을 사용할 수 없습니다.',
+      'status.analyzingProgress': '{current}/{total} 분석 중…',
+      'status.analyzeComplete': '분석 완료.',
+      'board.defaultName': '사운드보드',
+      'board.renameTitle': '클릭하여 보드 이름 변경',
+      'ui.dragToReorderPrefix': '드래그하여 순서 변경',
+      'ui.playPrefix': '재생',
+      'ui.noSounds': '사운드가 없습니다. 사운드를 추가하거나 보드를 가져오세요.',
+      'ui.noSearchMatches': '검색 결과가 없습니다.'
+    }
+  };
+  let currentLanguage = 'en';
   let searchQuery = '';
   let showHotkeyOnly = false;
   let categoryUiState = {};
@@ -58,6 +218,77 @@
   let settingsDirty = false;
   let settingsRenderIndex = 0;
   let settingsPreviouslyFocused = null;
+  let analyzeInProgress = false;
+
+  function t(key, vars = {}) {
+    const dict = I18N[currentLanguage] || I18N.en;
+    const template = dict[key] || I18N.en[key] || key;
+    return String(template).replace(/\{([a-zA-Z0-9_]+)\}/g, (_, name) => {
+      return Object.prototype.hasOwnProperty.call(vars, name) ? String(vars[name]) : '';
+    });
+  }
+
+  function applyTranslations() {
+    const textEls = Array.from(document.querySelectorAll('[data-i18n]'));
+    textEls.forEach((el) => {
+      const key = el.getAttribute('data-i18n');
+      if (!key) return;
+      el.textContent = t(key);
+    });
+    const titleEls = Array.from(document.querySelectorAll('[data-i18n-title]'));
+    titleEls.forEach((el) => {
+      const key = el.getAttribute('data-i18n-title');
+      if (!key) return;
+      el.title = t(key);
+    });
+    const placeholderEls = Array.from(document.querySelectorAll('[data-i18n-placeholder]'));
+    placeholderEls.forEach((el) => {
+      const key = el.getAttribute('data-i18n-placeholder');
+      if (!key) return;
+      el.setAttribute('placeholder', t(key));
+    });
+    if (searchInputEl) {
+      searchInputEl.setAttribute('aria-label', currentLanguage === 'ko'
+        ? '제목 또는 카테고리로 사운드 검색'
+        : 'Search sounds by title or category');
+    }
+    if (globalVolumeEl && globalVolumeLabel) {
+      const pct = parseInt(globalVolumeEl.value, 10);
+      globalVolumeLabel.textContent = t('label.volume', { pct: isNaN(pct) ? 100 : pct });
+    }
+    updateHotkeyOnlyButton();
+    updateSearchCount((getFilteredSounds() || []).length, currentBoard && currentBoard.sounds ? currentBoard.sounds.length : 0);
+    updateSettingsRenderedCount();
+  }
+
+  function setLanguage(lang) {
+    const next = lang === 'ko' ? 'ko' : 'en';
+    currentLanguage = next;
+    try { localStorage.setItem(LANGUAGE_KEY, next); } catch (_) {}
+    if (languageSelectEl) languageSelectEl.value = next;
+    if (boardNameEl && !boardNameEl.querySelector('input')) {
+      boardNameEl.title = t('board.renameTitle');
+    }
+    applyTranslations();
+    render();
+  }
+
+  function initI18n() {
+    let initial = 'en';
+    try {
+      const saved = localStorage.getItem(LANGUAGE_KEY);
+      if (saved === 'ko' || saved === 'en') initial = saved;
+    } catch (_) {}
+    currentLanguage = initial;
+    if (languageSelectEl) {
+      languageSelectEl.value = currentLanguage;
+      languageSelectEl.addEventListener('change', function () {
+        setLanguage(languageSelectEl.value || 'en');
+      });
+    }
+    window.SoundboardI18n = { t };
+    applyTranslations();
+  }
 
   function getCategoryStorageKey() {
     const boardId = currentBoard && currentBoard.id ? String(currentBoard.id) : 'default';
@@ -334,7 +565,7 @@
   function updateSettingsRenderedCount() {
     if (!settingsRenderedCountEl || !currentBoard || !Array.isArray(currentBoard.sounds)) return;
     const total = currentBoard.sounds.length;
-    settingsRenderedCountEl.textContent = 'Loaded ' + settingsRenderIndex + ' of ' + total + ' rows';
+    settingsRenderedCountEl.textContent = t('settings.loadedCount', { loaded: settingsRenderIndex, total });
   }
 
   function updateSettingsLoadMoreVisibility() {
@@ -433,7 +664,11 @@
       return a.localeCompare(b);
     });
 
-    return keys.map((k) => ({ key: k, label: k, sounds: map.get(k) }));
+    return keys.map((k) => ({
+      key: k,
+      label: k === 'Uncategorized' ? (currentLanguage === 'ko' ? '미분류' : 'Uncategorized') : k,
+      sounds: map.get(k)
+    }));
   }
 
   function reorderCategories(fromKey, toKey) {
@@ -460,14 +695,14 @@
       searchCountEl.textContent = '';
       return;
     }
-    const suffix = showHotkeyOnly ? ' hotkeys' : '';
+    const suffix = showHotkeyOnly ? t('search.hotkeysSuffix') : '';
     searchCountEl.textContent = String(count) + '/' + String(total) + suffix;
   }
 
   function updateHotkeyOnlyButton() {
     const btn = toolbarEl && toolbarEl.querySelector('[data-action="hotkey-only-toggle"]');
     const quickBtn = quickBarEl && quickBarEl.querySelector('[data-action="quick-hotkey-only"]');
-    const label = showHotkeyOnly ? 'Hotkeys only: ON' : 'Hotkeys only';
+    const label = showHotkeyOnly ? t('hotkey.only.on') : t('hotkey.only.off');
     if (btn) {
       btn.classList.toggle('btn--active', showHotkeyOnly);
       btn.setAttribute('aria-pressed', showHotkeyOnly ? 'true' : 'false');
@@ -530,8 +765,8 @@
   function setBoard(board) {
     currentBoard = board;
     if (boardNameEl) {
-      boardNameEl.textContent = board.name || 'Soundboard';
-      boardNameEl.title = 'Click to change board name';
+      boardNameEl.textContent = board.name || t('board.defaultName');
+      boardNameEl.title = t('board.renameTitle');
     }
     categoryUiState = loadCategoryUiState();
     categoryOrder = loadCategoryOrder();
@@ -542,6 +777,19 @@
     if (Audio && board.sounds && board.sounds.length) {
       Audio.preloadSounds(board.sounds);
     }
+    runAutoAnalyzeOnLoad();
+  }
+
+  function shouldAnalyzeSound(sound) {
+    if (!sound || !sound.fileUrl) return false;
+    const gain = sound.extra && typeof sound.extra === 'object' ? sound.extra.normGain : null;
+    return !(typeof gain === 'number' && isFinite(gain));
+  }
+
+  function runAutoAnalyzeOnLoad() {
+    if (!Audio || !Audio.analyzeFileUrl) return;
+    if (!Audio.getAutoLevelEnabled || !Audio.getAutoLevelEnabled()) return;
+    analyzeAllSounds({ onlyMissing: true, silent: true });
   }
 
   function buildHotkeyMap() {
@@ -791,7 +1039,8 @@
     if (!document || !document.body) return;
     const modalOpen = !!(modalEl && !modalEl.hidden);
     const settingsOpen = !!(settingsScreenEl && !settingsScreenEl.hidden);
-    document.body.classList.toggle('body--overlay-open', modalOpen || settingsOpen);
+    const helpOpen = !!(helpScreenEl && !helpScreenEl.hidden);
+    document.body.classList.toggle('body--overlay-open', modalOpen || settingsOpen || helpOpen);
   }
 
   function focusWithoutScroll(el) {
@@ -1013,6 +1262,20 @@
       focusWithoutScroll(settingsPreviouslyFocused);
     }
     return true;
+  }
+
+  function openHelpScreen() {
+    if (!helpScreenEl) return;
+    helpScreenEl.hidden = false;
+    helpScreenEl.setAttribute('aria-hidden', 'false');
+    syncOverlayBodyLock();
+  }
+
+  function closeHelpScreen() {
+    if (!helpScreenEl) return;
+    helpScreenEl.hidden = true;
+    helpScreenEl.setAttribute('aria-hidden', 'true');
+    syncOverlayBodyLock();
   }
 
   function trapFocusInSettingsScreen(e) {
@@ -1705,15 +1968,15 @@
       var input = document.createElement('input');
       input.type = 'text';
       input.className = 'header__title-input';
-      input.value = currentBoard.name || 'Soundboard';
-      input.setAttribute('aria-label', 'Board name');
+      input.value = currentBoard.name || t('board.defaultName');
+      input.setAttribute('aria-label', currentLanguage === 'ko' ? '보드 이름' : 'Board name');
       function commit() {
-        var name = (input.value || '').trim() || 'Soundboard';
+        var name = (input.value || '').trim() || t('board.defaultName');
         currentBoard.name = name;
         saveToStorage();
         boardNameEl.removeChild(input);
         boardNameEl.textContent = name;
-        boardNameEl.title = 'Click to change board name';
+        boardNameEl.title = t('board.renameTitle');
       }
       input.addEventListener('blur', commit);
       input.addEventListener('keydown', function (e) {
@@ -1723,8 +1986,8 @@
         }
         if (e.key === 'Escape') {
           boardNameEl.removeChild(input);
-          boardNameEl.textContent = currentBoard.name || 'Soundboard';
-          boardNameEl.title = 'Click to change board name';
+          boardNameEl.textContent = currentBoard.name || t('board.defaultName');
+          boardNameEl.title = t('board.renameTitle');
         }
       });
       boardNameEl.textContent = '';
@@ -1745,6 +2008,7 @@
     const reorderBtn = toolbarEl.querySelector('[data-action="reorder-toggle"]');
     const hotkeyOnlyBtn = toolbarEl.querySelector('[data-action="hotkey-only-toggle"]');
     const analyzeAllBtn = toolbarEl.querySelector('[data-action="analyze-all"]');
+    const helpBtn = toolbarEl.querySelector('[data-action="help-open"]');
     if (addBtn) addBtn.addEventListener('click', addSound);
     if (importBtn && importInput) importBtn.addEventListener('click', () => importInput.click());
     if (importInput) importInput.addEventListener('change', (e) => { if (e.target.files[0]) importBoard(e.target.files[0]); e.target.value = ''; });
@@ -1755,13 +2019,16 @@
     if (reorderBtn) reorderBtn.addEventListener('click', () => setReorderMode(!reorderMode));
     if (hotkeyOnlyBtn) bindTapAndClick(hotkeyOnlyBtn, toggleHotkeyOnlyFilter);
     if (analyzeAllBtn) analyzeAllBtn.addEventListener('click', analyzeAllSounds);
+    if (helpBtn) helpBtn.addEventListener('click', openHelpScreen);
     if (globalVolumeEl && Audio) {
       globalVolumeEl.addEventListener('input', function () {
         const pct = parseInt(globalVolumeEl.value, 10);
         if (Audio.setMasterVolume) Audio.setMasterVolume(pct / 100);
-        if (globalVolumeLabel) globalVolumeLabel.textContent = 'Volume ' + (isNaN(pct) ? 100 : pct) + '%';
+        if (globalVolumeLabel) globalVolumeLabel.textContent = t('label.volume', { pct: isNaN(pct) ? 100 : pct });
       });
-      if (globalVolumeLabel) globalVolumeLabel.textContent = 'Volume ' + (Audio.getMasterVolume ? Math.round(Audio.getMasterVolume() * 100) : 100) + '%';
+      if (globalVolumeLabel) globalVolumeLabel.textContent = t('label.volume', {
+        pct: Audio.getMasterVolume ? Math.round(Audio.getMasterVolume() * 100) : 100
+      });
     }
 
     if (searchInputEl) {
@@ -1787,10 +2054,12 @@
       } catch (_) {}
       autoLevelToggleEl.checked = initial;
       if (Audio && Audio.setAutoLevelEnabled) Audio.setAutoLevelEnabled(initial);
+      if (initial) runAutoAnalyzeOnLoad();
       autoLevelToggleEl.addEventListener('change', function () {
         const enabled = !!autoLevelToggleEl.checked;
         try { localStorage.setItem(AUTO_LEVEL_KEY, String(enabled)); } catch (_) {}
         if (Audio && Audio.setAutoLevelEnabled) Audio.setAutoLevelEnabled(enabled);
+        if (enabled) runAutoAnalyzeOnLoad();
       });
     }
 
@@ -1800,6 +2069,7 @@
       const quickSearch = quickBarEl.querySelector('[data-action="quick-search"]');
       const quickHotkeyOnly = quickBarEl.querySelector('[data-action="quick-hotkey-only"]');
       const quickSettings = quickBarEl.querySelector('[data-action="quick-settings"]');
+      const quickHelp = quickBarEl.querySelector('[data-action="quick-help"]');
       const quickReorder = quickBarEl.querySelector('[data-action="quick-reorder"]');
       const quickAnalyze = quickBarEl.querySelector('[data-action="quick-analyze"]');
 
@@ -1820,6 +2090,7 @@
         });
       }
       if (quickSettings) quickSettings.addEventListener('click', openSettingsScreen);
+      if (quickHelp) quickHelp.addEventListener('click', openHelpScreen);
       if (quickAnalyze) quickAnalyze.addEventListener('click', analyzeAllSounds);
     }
 
@@ -1881,28 +2152,46 @@
         }
       });
     }
+
+    if (helpScreenEl) {
+      const closeBtn = helpScreenEl.querySelector('[data-action="help-close"]');
+      if (closeBtn) closeBtn.addEventListener('click', closeHelpScreen);
+      helpScreenEl.addEventListener('click', function (e) {
+        if (e.target && e.target.classList && e.target.classList.contains('help-screen__backdrop')) {
+          closeHelpScreen();
+        }
+      });
+    }
   }
 
-  function analyzeAllSounds() {
+  function analyzeAllSounds(options = {}) {
+    const onlyMissing = options.onlyMissing === true;
+    const silent = options.silent === true;
+    if (analyzeInProgress) return;
     if (!currentBoard || !currentBoard.sounds || currentBoard.sounds.length === 0) {
-      if (downloadStatus) downloadStatus.textContent = 'No sounds to analyze.';
+      if (!silent && downloadStatus) downloadStatus.textContent = t('status.noSoundsToAnalyze');
       return;
     }
     if (!Audio || !Audio.analyzeFileUrl) {
-      if (downloadStatus) downloadStatus.textContent = 'Analysis not available.';
+      if (!silent && downloadStatus) downloadStatus.textContent = t('status.analysisUnavailable');
       return;
     }
-    const sounds = currentBoard.sounds.slice();
+    const sounds = currentBoard.sounds.slice().filter((s) => (onlyMissing ? shouldAnalyzeSound(s) : true));
+    if (sounds.length === 0) return;
+    analyzeInProgress = true;
     let i = 0;
     let updated = 0;
     const total = sounds.length;
-    if (downloadStatus) downloadStatus.textContent = 'Analyzing 0/' + total + '…';
+    if (!silent && downloadStatus) downloadStatus.textContent = t('status.analyzingProgress', { current: 0, total });
 
     function step() {
       if (i >= total) {
         if (updated > 0) saveToStorage();
-        if (downloadStatus) downloadStatus.textContent = 'Analyze complete.';
-        setTimeout(function () { if (downloadStatus) downloadStatus.textContent = ''; }, 2500);
+        analyzeInProgress = false;
+        if (!silent && downloadStatus) {
+          downloadStatus.textContent = t('status.analyzeComplete');
+          setTimeout(function () { if (downloadStatus) downloadStatus.textContent = ''; }, 2500);
+        }
         return;
       }
       const s = sounds[i++];
@@ -1917,7 +2206,7 @@
           updated++;
         }
       }).catch(function () {}).finally(function () {
-        if (downloadStatus) downloadStatus.textContent = 'Analyzing ' + i + '/' + total + '…';
+        if (!silent && downloadStatus) downloadStatus.textContent = t('status.analyzingProgress', { current: i, total });
         setTimeout(step, 0);
       });
     }
@@ -1980,6 +2269,11 @@
         closeSettingsScreen();
         return;
       }
+      if (helpScreenEl && !helpScreenEl.hidden && e.key === 'Escape') {
+        e.preventDefault();
+        closeHelpScreen();
+        return;
+      }
       const isTypingTarget = !!(e.target && (e.target.closest('input') || e.target.closest('textarea')));
       const key = (e.key || '').toUpperCase();
       if (!isTypingTarget && !e.metaKey && !e.ctrlKey && !e.altKey && e.shiftKey && key === 'H' && !hotkeyMap.has('Shift+H')) {
@@ -2025,6 +2319,7 @@
   }
 
   function init() {
+    initI18n();
     initToolbar();
     initModal();
     initKeyboard();

@@ -279,6 +279,94 @@ body.body--overlay-open {
   display: none;
 }
 
+.lang-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lang-picker__label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.lang-picker__select {
+  min-height: 34px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.help-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--space-3) + var(--safe-top)) var(--space-3) calc(var(--space-3) + var(--safe-bottom));
+}
+
+.help-screen[hidden] {
+  display: none;
+}
+
+.help-screen__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.64);
+}
+
+.help-screen__panel {
+  position: relative;
+  width: min(760px, 96vw);
+  max-height: var(--panel-max-height);
+  overflow: auto;
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1px solid rgba(255,255,255,0.10);
+  box-shadow: var(--shadow);
+}
+
+.help-screen__header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.help-screen__title {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.help-screen__content {
+  padding: 14px;
+  line-height: 1.45;
+}
+
+.help-screen__content h3 {
+  margin: 14px 0 8px;
+}
+
+.help-screen__content p {
+  margin: 0 0 8px;
+  color: var(--text-muted);
+}
+
+.help-screen__content ul {
+  margin: 0 0 12px 20px;
+  padding: 0;
+}
+
 .settings-screen {
   position: fixed;
   inset: 0;
@@ -471,6 +559,14 @@ body.body--overlay-open {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+  align-items: start;
+}
+
+.grid-groups__column {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
 }
 
 .category {
@@ -953,7 +1049,7 @@ body.body--overlay-open {
     bottom: 0;
     z-index: 40;
     display: grid;
-    grid-template-columns: repeat(7, 1fr);
+    grid-template-columns: repeat(8, 1fr);
     gap: 8px;
     padding: 10px 12px calc(10px + var(--safe-bottom));
     background: rgba(26, 26, 30, 0.96);
@@ -970,6 +1066,16 @@ body.body--overlay-open {
     font-weight: 600;
     font-size: 0.92rem;
     cursor: pointer;
+  }
+
+  .help-screen {
+    align-items: flex-start;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .help-screen__panel {
+    max-height: var(--panel-mobile-max-height);
   }
 
   .quick-bar__btn:hover {
@@ -1042,6 +1148,11 @@ body.body--overlay-open {
 }
 
 @media (max-width: 700px) {
+  .header {
+    padding-left: var(--space-3);
+    padding-right: var(--space-3);
+  }
+
   .toolbar {
     overflow: visible;
     flex-wrap: wrap;
@@ -1066,6 +1177,8 @@ body.body--overlay-open {
 
   .toolbar__group {
     align-items: stretch;
+    gap: 6px;
+    padding: 10px;
   }
 
   .toolbar__group > .btn,
@@ -1073,17 +1186,29 @@ body.body--overlay-open {
     width: 100%;
   }
 
+  .search {
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .search__input {
+    min-width: 0;
+  }
+
   .grid {
     grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
     min-height: 120px;
+    gap: 10px;
   }
 
   .tile {
-    min-height: 120px;
+    min-height: 110px;
+    padding: 8px;
   }
 
   .header__global-volume {
     flex-wrap: wrap;
+    gap: 8px;
   }
 
   .global-volume__slider {
@@ -1093,6 +1218,26 @@ body.body--overlay-open {
   .grid-groups {
     grid-template-columns: 1fr;
   }
+
+  .grid-groups__column {
+    gap: 12px;
+  }
+
+  .main {
+    padding-bottom: calc(104px + var(--safe-bottom));
+  }
+
+  .quick-bar {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    padding: 8px 10px calc(8px + var(--safe-bottom));
+  }
+
+  .quick-bar__btn {
+    min-height: 40px;
+    font-size: 0.85rem;
+    padding: 0 6px;
+  }
 }
 
 @media (max-width: 420px) {
@@ -1101,11 +1246,21 @@ body.body--overlay-open {
   }
 
   .quick-bar {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .lang-picker {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .lang-picker__select {
+    flex: 1;
   }
 
   .main {
     padding-left: var(--space-3);
     padding-right: var(--space-3);
+    padding-bottom: calc(152px + var(--safe-bottom));
   }
 }

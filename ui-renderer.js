@@ -8,6 +8,14 @@ function escapeText(str) {
   return String(str);
 }
 
+function t(key, fallback) {
+  const i18n = window.SoundboardI18n;
+  if (i18n && typeof i18n.t === 'function') {
+    return i18n.t(key);
+  }
+  return fallback;
+}
+
 function renderTile(sound, state, index, reorderMode, renderOptions = {}) {
   const stateClass = state === 'playing' ? 'tile--playing' : state === 'error' ? 'tile--error' : 'tile--idle';
   const reorderClass = reorderMode ? ' tile--reorder' : '';
@@ -26,7 +34,9 @@ function renderTile(sound, state, index, reorderMode, renderOptions = {}) {
   el.style.cssText = bgStyle;
   const hotkeyText = sound && sound.hotkey ? (' hotkey ' + String(sound.hotkey)) : '';
   const momentaryText = sound && sound.momentary ? ' momentary hold mode' : '';
-  el.setAttribute('aria-label', reorderMode ? 'Drag to reorder: ' + title : ('Play ' + title + hotkeyText + momentaryText));
+  el.setAttribute('aria-label', reorderMode
+    ? (t('ui.dragToReorderPrefix', 'Drag to reorder') + ': ' + title)
+    : (t('ui.playPrefix', 'Play') + ' ' + title + hotkeyText + momentaryText));
   if (reorderMode) el.setAttribute('draggable', 'true');
 
   if (reorderMode) {
@@ -102,7 +112,7 @@ function renderGrid(container, sounds, playState, errorIds, onPlay, onEdit, reor
   if (!Array.isArray(sounds) || sounds.length === 0) {
     const empty = document.createElement('p');
     empty.className = 'empty-message';
-    empty.textContent = 'No sounds. Add a sound or import a board.';
+    empty.textContent = t('ui.noSounds', 'No sounds. Add a sound or import a board.');
     container.appendChild(empty);
     return;
   }
@@ -222,7 +232,7 @@ function renderGroupedGrid(container, groups, playState, errorIds, onPlay, onEdi
   if (list.length === 0) {
     const empty = document.createElement('p');
     empty.className = 'empty-message';
-    empty.textContent = 'No sounds match your search.';
+    empty.textContent = t('ui.noSearchMatches', 'No sounds match your search.');
     container.appendChild(empty);
     return;
   }
@@ -231,6 +241,22 @@ function renderGroupedGrid(container, groups, playState, errorIds, onPlay, onEdi
   const onToggleCategory = typeof options.onToggleCategory === 'function' ? options.onToggleCategory : null;
   const onReorderCategory = typeof options.onReorderCategory === 'function' ? options.onReorderCategory : null;
   const onReorderSound = typeof options.onReorderSound === 'function' ? options.onReorderSound : null;
+  const useTwoColumns = typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && !window.matchMedia('(max-width: 700px)').matches;
+  let columnEls = null;
+
+  if (useTwoColumns) {
+    const colA = document.createElement('div');
+    const colB = document.createElement('div');
+    colA.className = 'grid-groups__column';
+    colB.className = 'grid-groups__column';
+    container.appendChild(colA);
+    container.appendChild(colB);
+    columnEls = [colA, colB];
+  }
+
+  let visibleCategoryIndex = 0;
 
   list.forEach((g) => {
     const key = escapeText(g && g.key != null ? g.key : '');
@@ -348,7 +374,13 @@ function renderGroupedGrid(container, groups, playState, errorIds, onPlay, onEdi
 
     section.appendChild(header);
     section.appendChild(body);
-    container.appendChild(section);
+    if (columnEls) {
+      const targetColumn = columnEls[visibleCategoryIndex % columnEls.length];
+      targetColumn.appendChild(section);
+    } else {
+      container.appendChild(section);
+    }
+    visibleCategoryIndex += 1;
   });
 }
 

@@ -9,43 +9,55 @@
 <body>
   <header class="header">
     <h1 id="board-name" class="header__title" title="Click to change board name">Soundboard</h1>
-    <p class="header__hint">Tip: click the board name to rename it.</p>
+    <p class="header__hint" data-i18n="header.hint">Tip: click the board name to rename it.</p>
     <div id="toolbar" class="toolbar">
       <div class="toolbar__group toolbar__group--create-edit" aria-label="Create and edit tools">
-        <span class="toolbar__group-label">Create/Edit</span>
-        <button type="button" class="btn btn--primary" data-action="add">Add Sound</button>
-        <button type="button" class="btn btn--secondary" data-action="web-add" title="Paste a Blerp or YouTube link to auto-import">Add Web Sound</button>
-        <button type="button" class="btn btn--secondary" data-action="settings-open" title="Edit all sounds in one long list">Manage All Sounds</button>
-        <button type="button" class="btn btn--secondary" id="reorder-toggle" data-action="reorder-toggle" title="Toggle reorder mode to drag and drop tiles">Reorder</button>
+        <span class="toolbar__group-label" data-i18n="toolbar.group.create">Create/Edit</span>
+        <button type="button" class="btn btn--primary" data-action="add" data-i18n="toolbar.add">Add Sound</button>
+        <button type="button" class="btn btn--secondary" data-action="web-add" title="Paste a Blerp or YouTube link to auto-import" data-i18n="toolbar.webAdd" data-i18n-title="toolbar.webAddTitle">Add Web Sound</button>
+        <button type="button" class="btn btn--secondary" data-action="settings-open" title="Edit all sounds in one long list" data-i18n="toolbar.manageAll" data-i18n-title="toolbar.manageAllTitle">Manage All Sounds</button>
+        <button type="button" class="btn btn--secondary" id="reorder-toggle" data-action="reorder-toggle" title="Toggle reorder mode to drag and drop tiles" data-i18n="toolbar.reorder" data-i18n-title="toolbar.reorderTitle">Reorder</button>
+        <button type="button" class="btn btn--secondary" data-action="help-open" data-i18n="toolbar.help">How to Use</button>
       </div>
 
       <div class="toolbar__group toolbar__group--board-file" aria-label="Board file tools">
-        <span class="toolbar__group-label">Board File</span>
+        <span class="toolbar__group-label" data-i18n="toolbar.group.board">Board File</span>
         <label class="btn btn--secondary">
-          Import Board
+          <span data-i18n="toolbar.import">Import Board</span>
           <input type="file" id="import-input" accept=".json" hidden>
         </label>
-        <button type="button" class="btn btn--secondary" data-action="export">Export Board</button>
+        <button type="button" class="btn btn--secondary" data-action="export" data-i18n="toolbar.export">Export Board</button>
       </div>
 
       <div class="toolbar__group toolbar__group--audio-tools" aria-label="Audio tools">
-        <span class="toolbar__group-label">Audio Tools</span>
-        <button type="button" class="btn btn--secondary" data-action="download-sounds" title="Download each sound, save to a folder (or into the app), then update the board to use local copies">Download all sounds</button>
+        <span class="toolbar__group-label" data-i18n="toolbar.group.audio">Audio Tools</span>
+        <button type="button" class="btn btn--secondary" data-action="download-sounds" title="Download each sound, save to a folder (or into the app), then update the board to use local copies" data-i18n="toolbar.downloadAll" data-i18n-title="toolbar.downloadAllTitle">Download all sounds</button>
         <label class="btn btn--secondary auto-level" title="Automatically level sound volumes">
           <input type="checkbox" id="auto-level-toggle" class="auto-level__check" checked>
-          <span class="auto-level__label">Auto level</span>
+          <span class="auto-level__label" data-i18n="toolbar.autoLevel">Auto level</span>
         </label>
-        <button type="button" class="btn btn--secondary" data-action="analyze-all" title="Analyze all sounds for consistent volume (recommended once per board)">Analyze all</button>
+        <button type="button" class="btn btn--secondary" data-action="analyze-all" title="Analyze all sounds for consistent volume (recommended once per board)" data-i18n="toolbar.analyzeAll" data-i18n-title="toolbar.analyzeAllTitle">Analyze all</button>
       </div>
 
       <div class="toolbar__group toolbar__group--search" aria-label="Search tools">
-        <span class="toolbar__group-label">Search</span>
+        <span class="toolbar__group-label" data-i18n="toolbar.group.search">Search</span>
         <div class="search" role="search" aria-label="Search sounds">
-          <input type="search" id="search-input" class="search__input" placeholder="Search (title or category)…" aria-label="Search sounds by title or category">
-          <button type="button" id="search-clear" class="search__clear" aria-label="Clear search" title="Clear search">Clear</button>
+          <input type="search" id="search-input" class="search__input" placeholder="Search (title or category)…" aria-label="Search sounds by title or category" data-i18n-placeholder="search.placeholder">
+          <button type="button" id="search-clear" class="search__clear" aria-label="Clear search" title="Clear search" data-i18n="search.clear">Clear</button>
           <span class="search__count" id="search-count" aria-live="polite"></span>
         </div>
         <button type="button" class="btn btn--secondary" data-action="hotkey-only-toggle" title="Show only sounds that have a hotkey (Shift+H)">Hotkeys only</button>
+      </div>
+
+      <div class="toolbar__group toolbar__group--lang" aria-label="Language tools">
+        <span class="toolbar__group-label" data-i18n="toolbar.group.language">Language</span>
+        <label class="lang-picker">
+          <span class="lang-picker__label" data-i18n="toolbar.language">Language</span>
+          <select id="language-select" class="lang-picker__select" aria-label="Language">
+            <option value="en">English</option>
+            <option value="ko">한국어</option>
+          </select>
+        </label>
       </div>
 
       <span class="toolbar__status" id="download-status" aria-live="polite"></span>
@@ -61,14 +73,59 @@
   </main>
 
   <nav class="quick-bar" id="quick-bar" aria-label="Quick actions">
-    <button type="button" class="quick-bar__btn" data-action="quick-add">Add</button>
-    <button type="button" class="quick-bar__btn" data-action="quick-web">Web</button>
-    <button type="button" class="quick-bar__btn" data-action="quick-search">Search</button>
-    <button type="button" class="quick-bar__btn" data-action="quick-hotkey-only" aria-pressed="false">Hotkeys</button>
-    <button type="button" class="quick-bar__btn" data-action="quick-settings">Settings</button>
-    <button type="button" class="quick-bar__btn" data-action="quick-reorder">Reorder</button>
-    <button type="button" class="quick-bar__btn" data-action="quick-analyze">Analyze</button>
+    <button type="button" class="quick-bar__btn" data-action="quick-add" data-i18n="quick.add">Add</button>
+    <button type="button" class="quick-bar__btn" data-action="quick-web" data-i18n="quick.web">Web</button>
+    <button type="button" class="quick-bar__btn" data-action="quick-search" data-i18n="quick.search">Search</button>
+    <button type="button" class="quick-bar__btn" data-action="quick-hotkey-only" aria-pressed="false" data-i18n="quick.hotkeys">Hotkeys</button>
+    <button type="button" class="quick-bar__btn" data-action="quick-settings" data-i18n="quick.settings">Settings</button>
+    <button type="button" class="quick-bar__btn" data-action="quick-help" data-i18n="quick.help">Help</button>
+    <button type="button" class="quick-bar__btn" data-action="quick-reorder" data-i18n="quick.reorder">Reorder</button>
+    <button type="button" class="quick-bar__btn" data-action="quick-analyze" data-i18n="quick.analyze">Analyze</button>
   </nav>
+
+  <section id="help-screen" class="help-screen" role="dialog" aria-modal="true" aria-labelledby="help-screen-title" hidden aria-hidden="true">
+    <div class="help-screen__backdrop"></div>
+    <div class="help-screen__panel">
+      <header class="help-screen__header">
+        <h2 id="help-screen-title" class="help-screen__title" data-i18n="help.title">How to Use</h2>
+        <button type="button" class="btn btn--secondary" data-action="help-close" data-i18n="help.close">Close</button>
+      </header>
+      <div class="help-screen__content">
+        <h3 data-i18n="help.enHeader">English Guide</h3>
+        <p data-i18n="help.enIntro">Use this soundboard to quickly play, organize, and manage sounds.</p>
+        <ul>
+          <li data-i18n="help.en1">Add sounds with Add Sound or Add Web Sound.</li>
+          <li data-i18n="help.en2">Edit a tile with the pencil icon (or right-click on desktop).</li>
+          <li data-i18n="help.en3">Assign hotkeys like Q, Shift+A, or Shift+.</li>
+          <li data-i18n="help.en4">Use Hotkeys only to show only sounds with hotkeys.</li>
+          <li data-i18n="help.en5">Use Reorder to drag sounds/categories into new positions.</li>
+          <li data-i18n="help.en6">Use Manage All Sounds for bulk editing and saving.</li>
+        </ul>
+        <h4 data-i18n="help.hotkeysHeader">Useful Hotkeys for default sounds</h4>
+        <ul>
+          <li data-i18n="help.hk1">3 - Mario Kart 3-2-1 Go</li>
+          <li data-i18n="help.hk2">X - Wrong answer buzzer</li>
+          <li data-i18n="help.hk3">R - Great!</li>
+          <li data-i18n="help.hk4">A - Anime Wow</li>
+          <li data-i18n="help.hk5">9 - Sad music</li>
+          <li data-i18n="help.hk6">P - Perfect</li>
+          <li data-i18n="help.hk7">M - Stop, wait a minute</li>
+          <li data-i18n="help.hk8">V - Victory sound</li>
+          <li data-i18n="help.hk9">1 - One more Time</li>
+        </ul>
+        <h3 data-i18n="help.koHeader">한국어 안내</h3>
+        <p data-i18n="help.koIntro">이 사운드보드는 사운드를 빠르게 재생하고 정리/관리할 수 있도록 만들어졌습니다.</p>
+        <ul>
+          <li data-i18n="help.ko1">Add Sound 또는 Add Web Sound로 사운드를 추가하세요.</li>
+          <li data-i18n="help.ko2">타일의 연필 아이콘(PC는 우클릭)으로 편집할 수 있습니다.</li>
+          <li data-i18n="help.ko3">Q, Shift+A, Shift+. 같은 단축키를 지정할 수 있습니다.</li>
+          <li data-i18n="help.ko4">Hotkeys only로 단축키가 있는 사운드만 볼 수 있습니다.</li>
+          <li data-i18n="help.ko5">Reorder에서 드래그하여 사운드/카테고리 순서를 바꿀 수 있습니다.</li>
+          <li data-i18n="help.ko6">Manage All Sounds에서 전체 일괄 편집 후 저장할 수 있습니다.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
 
   <section id="settings-screen" class="settings-screen" role="dialog" aria-modal="true" aria-labelledby="settings-screen-title" hidden aria-hidden="true">
     <div class="settings-screen__backdrop"></div>

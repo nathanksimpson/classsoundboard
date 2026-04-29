@@ -24,7 +24,7 @@ function renderTile(sound, state, index, reorderMode, renderOptions = {}) {
   el.dataset.soundId = sound.id;
   el.dataset.index = String(index);
   el.style.cssText = bgStyle;
-  const hotkeyText = sound && sound.hotkey ? (' hotkey ' + String(sound.hotkey).toUpperCase()) : '';
+  const hotkeyText = sound && sound.hotkey ? (' hotkey ' + String(sound.hotkey)) : '';
   const momentaryText = sound && sound.momentary ? ' momentary hold mode' : '';
   el.setAttribute('aria-label', reorderMode ? 'Drag to reorder: ' + title : ('Play ' + title + hotkeyText + momentaryText));
   if (reorderMode) el.setAttribute('draggable', 'true');
@@ -42,7 +42,7 @@ function renderTile(sound, state, index, reorderMode, renderOptions = {}) {
   label.textContent = title;
   el.appendChild(label);
 
-  const normalizedHotkey = String(sound && sound.hotkey ? sound.hotkey : '').trim().toUpperCase();
+  const normalizedHotkey = String(sound && sound.hotkey ? sound.hotkey : '').trim();
   const hotkeyCounts = renderOptions.hotkeyCounts instanceof Map ? renderOptions.hotkeyCounts : new Map();
   const isHotkeyConflict = normalizedHotkey && (hotkeyCounts.get(normalizedHotkey) || 0) > 1;
   if (!reorderMode && (normalizedHotkey || sound.momentary)) {

@@ -976,6 +976,12 @@ body.body--overlay-open {
     background: rgba(255,255,255,0.08);
   }
 
+.quick-bar__btn[aria-pressed="true"] {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
   .settings-screen {
     align-items: flex-start;
     overflow-y: auto;

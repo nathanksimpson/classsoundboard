@@ -52,6 +52,7 @@
   const AUTO_LEVEL_KEY = 'soundboard-auto-level';
   const SETTINGS_BATCH_SIZE = 80;
   let searchQuery = '';
+  let showHotkeyOnly = false;
   let categoryUiState = {};
   let categoryOrder = [];
   let settingsDirty = false;
@@ -117,11 +118,146 @@
   }
 
   function normalizeHotkeyInput(value) {
-    const text = String(value == null ? '' : value).trim().toUpperCase();
+    const text = String(value == null ? '' : value).trim();
     if (!text) return '';
-    const char = text.charAt(0);
-    if (!/^[A-Z0-9]$/.test(char)) return '';
-    return char;
+    const compact = text.replace(/\s*\+\s*/g, '+');
+    const rawParts = compact.split('+').map((part) => part.trim()).filter(Boolean);
+    if (rawParts.length === 0) return '';
+
+    const modifierAliases = new Map([
+      ['CTRL', 'Ctrl'],
+      ['CONTROL', 'Ctrl'],
+      ['ALT', 'Alt'],
+      ['OPTION', 'Alt'],
+      ['SHIFT', 'Shift'],
+      ['META', 'Meta'],
+      ['CMD', 'Meta'],
+      ['COMMAND', 'Meta'],
+      ['WIN', 'Meta'],
+      ['WINDOWS', 'Meta']
+    ]);
+    const keyAliases = new Map([
+      ['SPACE', 'Space'],
+      ['SPACEBAR', 'Space'],
+      ['ESC', 'Escape'],
+      ['RETURN', 'Enter'],
+      ['UP', 'ArrowUp'],
+      ['DOWN', 'ArrowDown'],
+      ['LEFT', 'ArrowLeft'],
+      ['RIGHT', 'ArrowRight'],
+      ['PERIOD', '.'],
+      ['DOT', '.'],
+      ['COMMA', ','],
+      ['SLASH', '/'],
+      ['QUESTION', '/'],
+      ['BACKSLASH', '\\'],
+      ['SEMICOLON', ';'],
+      ['COLON', ';'],
+      ['QUOTE', "'"],
+      ['APOSTROPHE', "'"],
+      ['BACKQUOTE', '`'],
+      ['GRAVE', '`'],
+      ['MINUS', '-'],
+      ['DASH', '-'],
+      ['EQUAL', '='],
+      ['PLUS', '='],
+      ['LBRACKET', '['],
+      ['RBRACKET', ']'],
+      ['BRACKETLEFT', '['],
+      ['BRACKETRIGHT', ']']
+    ]);
+    const modifierOrder = ['Ctrl', 'Alt', 'Shift', 'Meta'];
+    const modifiers = new Set();
+
+    const keyRaw = rawParts.pop();
+    rawParts.forEach((part) => {
+      const normalized = modifierAliases.get(part.toUpperCase());
+      if (normalized) modifiers.add(normalized);
+    });
+    if (rawParts.length !== modifiers.size) return '';
+
+    function normalizeKeyToken(token) {
+      const trimmed = String(token || '').trim();
+      if (!trimmed) return '';
+      if (trimmed.length === 1) {
+        const ch = trimmed;
+        if (/^[a-z]$/i.test(ch)) return ch.toUpperCase();
+        return ch;
+      }
+      const upper = trimmed.toUpperCase();
+      if (/^F([1-9]|1[0-2])$/.test(upper)) return upper;
+      if (keyAliases.has(upper)) return keyAliases.get(upper);
+      const canonicalNames = new Set([
+        'ENTER', 'TAB', 'ESCAPE', 'BACKSPACE', 'DELETE', 'INSERT', 'HOME', 'END', 'PAGEUP', 'PAGEDOWN',
+        'ARROWUP', 'ARROWDOWN', 'ARROWLEFT', 'ARROWRIGHT'
+      ]);
+      if (canonicalNames.has(upper)) {
+        const lower = upper.toLowerCase();
+        return lower.charAt(0).toUpperCase() + lower.slice(1);
+      }
+      return '';
+    }
+
+    const key = normalizeKeyToken(keyRaw);
+    if (!key) return '';
+    if (modifierAliases.has(String(keyRaw).toUpperCase()) || modifierAliases.has(String(key).toUpperCase())) return '';
+
+    const orderedModifiers = modifierOrder.filter((mod) => modifiers.has(mod));
+    return orderedModifiers.length ? (orderedModifiers.join('+') + '+' + key) : key;
+  }
+
+  function getHotkeySignatureFromKeyboardEvent(e) {
+    if (!e) return '';
+    const shiftedCharToBase = {
+      '~': '`',
+      '!': '1',
+      '@': '2',
+      '#': '3',
+      '$': '4',
+      '%': '5',
+      '^': '6',
+      '&': '7',
+      '*': '8',
+      '(': '9',
+      ')': '0',
+      '_': '-',
+      '+': '=',
+      '{': '[',
+      '}': ']',
+      '|': '\\',
+      ':': ';',
+      '"': "'",
+      '<': ',',
+      '>': '.',
+      '?': '/'
+    };
+    const keyAlias = {
+      ' ': 'Space',
+      Spacebar: 'Space',
+      Esc: 'Escape',
+      Return: 'Enter',
+      Up: 'ArrowUp',
+      Down: 'ArrowDown',
+      Left: 'ArrowLeft',
+      Right: 'ArrowRight'
+    };
+
+    let key = e.key || '';
+    if (!key) return '';
+    if (keyAlias[key]) key = keyAlias[key];
+    if (key.length === 1) {
+      if (e.shiftKey && shiftedCharToBase[key]) key = shiftedCharToBase[key];
+      if (/^[a-z]$/i.test(key)) key = key.toUpperCase();
+    }
+
+    const signature = normalizeHotkeyInput(
+      (e.ctrlKey ? 'Ctrl+' : '')
+      + (e.altKey ? 'Alt+' : '')
+      + (e.shiftKey ? 'Shift+' : '')
+      + (e.metaKey ? 'Meta+' : '')
+      + key
+    );
+    return signature;
   }
 
   function clearSettingsFeedback() {
@@ -204,7 +340,7 @@
       + '  <label><span class="field__label">Audio URL</span><input class="field__input" data-field="fileUrl" type="text" value="' + escapeAttr(sound.fileUrl || '') + '"></label>'
       + '  <label><span class="field__label">Image URL</span><input class="field__input" data-field="imageUrl" type="text" value="' + escapeAttr(sound.imageUrl || '') + '"></label>'
       + '  <label><span class="field__label">Category</span><input class="field__input" data-field="category" type="text" list="category-options" value="' + escapeAttr(sound.category || '') + '"></label>'
-      + '  <label><span class="field__label">Hotkey (A-Z or 0-9)</span><input class="field__input" data-field="hotkey" maxlength="1" type="text" value="' + escapeAttr(normalizeHotkeyInput(sound.hotkey || '')) + '"></label>'
+      + '  <label><span class="field__label">Hotkey (examples: Q, Shift+., Ctrl+Alt+P)</span><input class="field__input" data-field="hotkey" type="text" value="' + escapeAttr(normalizeHotkeyInput(sound.hotkey || '')) + '"></label>'
       + '  <label><span class="field__label">Volume %</span><input class="field__input" data-field="volume" type="number" min="0" max="100" step="1" value="' + escapeAttr(Math.round((sound.volume != null ? sound.volume : 1) * 100)) + '"></label>'
       + '  <label><span class="field__label">Speed</span><input class="field__input" data-field="playbackRate" type="number" min="0.5" max="2" step="0.1" value="' + escapeAttr(sound.playbackRate != null ? sound.playbackRate : 1) + '"></label>'
       + '  <label><span class="field__label">Start sec</span><input class="field__input" data-field="startSec" type="number" min="0" step="0.01" value="' + escapeAttr(sound.startMs != null ? (sound.startMs / 1000) : '') + '"></label>'
@@ -241,11 +377,17 @@
     return title.includes(q) || cat.includes(q);
   }
 
+  function soundHasAssignedHotkey(sound) {
+    return !!normalizeHotkeyInput(sound && sound.hotkey);
+  }
+
   function getFilteredSounds() {
     const sounds = currentBoard && Array.isArray(currentBoard.sounds) ? currentBoard.sounds : [];
     const q = (searchQuery || '').trim().toLowerCase();
-    if (!q) return sounds.slice();
-    return sounds.filter((s) => soundMatchesQuery(s, q));
+    return sounds.filter((s) => {
+      if (showHotkeyOnly && !soundHasAssignedHotkey(s)) return false;
+      return soundMatchesQuery(s, q);
+    });
   }
 
   function buildGroups(sounds) {
@@ -290,11 +432,32 @@
   function updateSearchCount(count, total) {
     if (!searchCountEl) return;
     const q = (searchQuery || '').trim();
-    if (!q) {
+    if (!q && !showHotkeyOnly) {
       searchCountEl.textContent = '';
       return;
     }
-    searchCountEl.textContent = String(count) + '/' + String(total);
+    const suffix = showHotkeyOnly ? ' hotkeys' : '';
+    searchCountEl.textContent = String(count) + '/' + String(total) + suffix;
+  }
+
+  function updateHotkeyOnlyButton() {
+    const btn = toolbarEl && toolbarEl.querySelector('[data-action="hotkey-only-toggle"]');
+    const quickBtn = quickBarEl && quickBarEl.querySelector('[data-action="quick-hotkey-only"]');
+    const label = showHotkeyOnly ? 'Hotkeys only: ON' : 'Hotkeys only';
+    if (btn) {
+      btn.classList.toggle('btn--active', showHotkeyOnly);
+      btn.setAttribute('aria-pressed', showHotkeyOnly ? 'true' : 'false');
+      btn.textContent = label;
+    }
+    if (quickBtn) {
+      quickBtn.classList.toggle('btn--active', showHotkeyOnly);
+      quickBtn.setAttribute('aria-pressed', showHotkeyOnly ? 'true' : 'false');
+    }
+  }
+
+  function toggleHotkeyOnlyFilter() {
+    showHotkeyOnly = !showHotkeyOnly;
+    render();
   }
 
   function loadInitialBoard() {
@@ -372,6 +535,7 @@
 
     if (!Array.isArray(allSounds) || allSounds.length === 0) {
       UI.renderGrid(gridEl, [], playingId, errorIds, onPlay, onEditSound, reorderMode, reorderSounds, { hotkeyCounts });
+      updateHotkeyOnlyButton();
       updateReorderButton();
       return;
     }
@@ -404,6 +568,7 @@
     } else {
       UI.renderGrid(gridEl, filtered, playingId, errorIds, onPlay, onEditSound, reorderMode, reorderSounds, { hotkeyCounts });
     }
+    updateHotkeyOnlyButton();
     updateReorderButton();
   }
 
@@ -1065,7 +1230,7 @@
       const hotkeyInput = row.querySelector('[data-field="hotkey"]');
       if (hotkeyInput) hotkeyInput.value = hotkey;
       if (hotkeyRaw && !hotkey) {
-        trackInvalid(row, 'hotkey', 'Hotkey must be one letter or number (A-Z, 0-9).');
+        trackInvalid(row, 'hotkey', 'Use a valid hotkey format (examples: Q, Shift+., Shift+A, Ctrl+Alt+P).');
         continue;
       }
       if (hotkey) {
@@ -1222,7 +1387,7 @@
     const hotkeyRaw = (modalForm.querySelector('[name="hotkey"]').value || '').trim();
     const hotkey = normalizeHotkeyInput(hotkeyRaw);
     if (hotkeyRaw && !hotkey) {
-      if (modalError) modalError.textContent = 'Hotkey must be one letter or number (A-Z, 0-9).';
+      if (modalError) modalError.textContent = 'Use a valid hotkey format (examples: Q, Shift+., Shift+A, Ctrl+Alt+P).';
       return;
     }
 
@@ -1539,6 +1704,7 @@
     const webAddBtn = toolbarEl.querySelector('[data-action="web-add"]');
     const settingsBtn = toolbarEl.querySelector('[data-action="settings-open"]');
     const reorderBtn = toolbarEl.querySelector('[data-action="reorder-toggle"]');
+    const hotkeyOnlyBtn = toolbarEl.querySelector('[data-action="hotkey-only-toggle"]');
     const analyzeAllBtn = toolbarEl.querySelector('[data-action="analyze-all"]');
     if (addBtn) addBtn.addEventListener('click', addSound);
     if (importBtn && importInput) importBtn.addEventListener('click', () => importInput.click());
@@ -1548,6 +1714,7 @@
     if (webAddBtn) webAddBtn.addEventListener('click', addFromWebUrl);
     if (settingsBtn) settingsBtn.addEventListener('click', openSettingsScreen);
     if (reorderBtn) reorderBtn.addEventListener('click', () => setReorderMode(!reorderMode));
+    if (hotkeyOnlyBtn) hotkeyOnlyBtn.addEventListener('click', toggleHotkeyOnlyFilter);
     if (analyzeAllBtn) analyzeAllBtn.addEventListener('click', analyzeAllSounds);
     if (globalVolumeEl && Audio) {
       globalVolumeEl.addEventListener('input', function () {
@@ -1592,6 +1759,7 @@
       const quickAdd = quickBarEl.querySelector('[data-action="quick-add"]');
       const quickWeb = quickBarEl.querySelector('[data-action="quick-web"]');
       const quickSearch = quickBarEl.querySelector('[data-action="quick-search"]');
+      const quickHotkeyOnly = quickBarEl.querySelector('[data-action="quick-hotkey-only"]');
       const quickSettings = quickBarEl.querySelector('[data-action="quick-settings"]');
       const quickReorder = quickBarEl.querySelector('[data-action="quick-reorder"]');
       const quickAnalyze = quickBarEl.querySelector('[data-action="quick-analyze"]');
@@ -1606,6 +1774,7 @@
           }
         });
       }
+      if (quickHotkeyOnly) quickHotkeyOnly.addEventListener('click', toggleHotkeyOnlyFilter);
       if (quickReorder) {
         quickReorder.addEventListener('click', function () {
           setReorderMode(!reorderMode);
@@ -1641,13 +1810,14 @@
       settingsScreenEl.addEventListener('input', function (e) {
         const t = e.target;
         if (t && t.matches && t.matches('[data-field]')) setSettingsDirty(true);
-        if (t && t.matches && t.matches('[data-field="hotkey"]')) {
-          t.value = normalizeHotkeyInput(t.value);
-        }
       });
       settingsScreenEl.addEventListener('change', function (e) {
         const t = e.target;
         if (t && t.matches && t.matches('[data-field]')) setSettingsDirty(true);
+        if (t && t.matches && t.matches('[data-field="hotkey"]')) {
+          const normalized = normalizeHotkeyInput(t.value);
+          if (normalized) t.value = normalized;
+        }
       });
       settingsScreenEl.addEventListener('keydown', function (e) {
         trapFocusInSettingsScreen(e);
@@ -1742,8 +1912,9 @@
     if (speedRange) speedRange.addEventListener('input', function () { updateSpeedValue(parseFloat(speedRange.value)); });
     if (fileUrlInput && Audio) fileUrlInput.addEventListener('blur', soundFromFormForDuration);
     if (hotkeyInput) {
-      hotkeyInput.addEventListener('input', function () {
-        hotkeyInput.value = normalizeHotkeyInput(hotkeyInput.value);
+      hotkeyInput.addEventListener('change', function () {
+        const normalized = normalizeHotkeyInput(hotkeyInput.value);
+        if (normalized) hotkeyInput.value = normalized;
       });
     }
     const uploadInput = document.getElementById('upload-audio-input');
@@ -1761,18 +1932,26 @@
         closeSettingsScreen();
         return;
       }
+      const isTypingTarget = !!(e.target && (e.target.closest('input') || e.target.closest('textarea')));
+      const key = (e.key || '').toUpperCase();
+      if (!isTypingTarget && !e.metaKey && !e.ctrlKey && !e.altKey && e.shiftKey && key === 'H' && !hotkeyMap.has('Shift+H')) {
+        e.preventDefault();
+        if (!(modalEl && !modalEl.hidden) && !(settingsScreenEl && !settingsScreenEl.hidden)) {
+          toggleHotkeyOnlyFilter();
+        }
+        return;
+      }
       if (modalEl && !modalEl.hidden) return;
       if (settingsScreenEl && !settingsScreenEl.hidden) return;
       if (e.repeat) return;
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (e.target && (e.target.closest('input') || e.target.closest('textarea'))) return;
-      const key = (e.key || '').toUpperCase();
-      const sound = key ? hotkeyMap.get(key) : null;
+      if (isTypingTarget) return;
+      const signature = getHotkeySignatureFromKeyboardEvent(e);
+      const sound = signature ? hotkeyMap.get(signature) : null;
       if (sound) {
         e.preventDefault();
         if (sound.momentary) {
-          if (activeMomentaryKeys.has(key)) return;
-          activeMomentaryKeys.add(key);
+          if (activeMomentaryKeys.has(signature)) return;
+          activeMomentaryKeys.add(signature);
           onPlay(sound, 'momentary-start');
           return;
         }
@@ -1780,11 +1959,10 @@
       }
     });
     document.addEventListener('keyup', (e) => {
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      const key = (e.key || '').toUpperCase();
-      if (!activeMomentaryKeys.has(key)) return;
-      activeMomentaryKeys.delete(key);
-      const sound = key ? hotkeyMap.get(key) : null;
+      const signature = getHotkeySignatureFromKeyboardEvent(e);
+      if (!activeMomentaryKeys.has(signature)) return;
+      activeMomentaryKeys.delete(signature);
+      const sound = signature ? hotkeyMap.get(signature) : null;
       if (sound && sound.momentary) onPlay(sound, 'momentary-stop');
     });
     window.addEventListener('blur', () => {

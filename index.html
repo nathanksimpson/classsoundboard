@@ -45,6 +45,7 @@
           <button type="button" id="search-clear" class="search__clear" aria-label="Clear search" title="Clear search">Clear</button>
           <span class="search__count" id="search-count" aria-live="polite"></span>
         </div>
+        <button type="button" class="btn btn--secondary" data-action="hotkey-only-toggle" title="Show only sounds that have a hotkey (Shift+H)">Hotkeys only</button>
       </div>
 
       <span class="toolbar__status" id="download-status" aria-live="polite"></span>
@@ -63,6 +64,7 @@
     <button type="button" class="quick-bar__btn" data-action="quick-add">Add</button>
     <button type="button" class="quick-bar__btn" data-action="quick-web">Web</button>
     <button type="button" class="quick-bar__btn" data-action="quick-search">Search</button>
+    <button type="button" class="quick-bar__btn" data-action="quick-hotkey-only" aria-pressed="false">Hotkeys</button>
     <button type="button" class="quick-bar__btn" data-action="quick-settings">Settings</button>
     <button type="button" class="quick-bar__btn" data-action="quick-reorder">Reorder</button>
     <button type="button" class="quick-bar__btn" data-action="quick-analyze">Analyze</button>
@@ -121,8 +123,8 @@
           <input type="text" name="category" class="field__input" list="category-options">
         </label>
         <label class="field">
-          <span class="field__label">Hotkey (e.g. Q)</span>
-          <input type="text" name="hotkey" class="field__input" maxlength="1" placeholder="Q">
+          <span class="field__label">Hotkey (examples: Q, Shift+., Shift+A)</span>
+          <input type="text" name="hotkey" class="field__input" placeholder="Shift+.">
         </label>
         <label class="field">
           <span class="field__label">Volume <span id="volume-percent">100%</span></span>

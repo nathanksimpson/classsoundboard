@@ -72,6 +72,12 @@ body.body--overlay-open {
   color: var(--primary);
 }
 
+.header__hint {
+  margin: -6px 0 10px 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
 .header__title-input {
   width: 100%;
   max-width: 320px;
@@ -89,8 +95,36 @@ body.body--overlay-open {
 .toolbar {
   display: flex;
   flex-wrap: wrap;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.toolbar__group {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  padding: 8px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: var(--radius);
+  background: rgba(0,0,0,0.12);
+}
+
+.toolbar__group-label {
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  width: 100%;
+}
+
+.toolbar__group--search {
+  margin-left: auto;
+}
+
+.toolbar__status {
+  align-self: center;
+  margin-left: auto;
 }
 
 .search {
@@ -120,9 +154,9 @@ body.body--overlay-open {
 }
 
 .search__clear {
-  width: 28px;
-  height: 28px;
-  line-height: 28px;
+  min-width: 60px;
+  height: 32px;
+  line-height: 30px;
   border-radius: 6px;
   border: 1px solid rgba(255,255,255,0.12);
   background: var(--surface);
@@ -326,6 +360,42 @@ body.body--overlay-open {
   color: var(--text-muted);
 }
 
+.settings-screen__feedback {
+  margin: 0;
+  padding: 10px 14px;
+  font-size: 0.9rem;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  min-height: 42px;
+}
+
+.settings-screen__feedback--error {
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.2);
+}
+
+.settings-screen__feedback--success {
+  color: #bbf7d0;
+  background: rgba(20, 83, 45, 0.2);
+}
+
+.settings-list__controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.settings-list__count {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.settings-list__more[hidden] {
+  display: none;
+}
+
 .settings-list {
   overflow: auto;
   overscroll-behavior: contain;
@@ -341,6 +411,21 @@ body.body--overlay-open {
   border-radius: 10px;
   padding: 10px;
   background: rgba(0,0,0,0.14);
+}
+
+.settings-row--invalid {
+  border-color: rgba(239, 68, 68, 0.8);
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.35);
+}
+
+.settings-row__error {
+  margin: 8px 0 0 0;
+  color: #fecaca;
+  font-size: 0.84rem;
+}
+
+.field__input--invalid {
+  border-color: var(--danger);
 }
 
 .settings-row[hidden] {
@@ -518,6 +603,26 @@ body.body--overlay-open {
   line-height: 1.2;
   word-break: break-word;
   max-width: 100%;
+}
+
+.tile__meta {
+  position: absolute;
+  bottom: 6px;
+  left: 6px;
+  display: inline-flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  max-width: calc(100% - 12px);
+}
+
+.tile__badge {
+  font-size: 0.68rem;
+  line-height: 1;
+  padding: 3px 5px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.4);
+  background: rgba(0,0,0,0.45);
+  color: #fff;
 }
 
 .tile__icon,
@@ -783,9 +888,20 @@ body.body--overlay-open {
     mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 18px), transparent 100%);
   }
 
-  .toolbar > * {
+  .toolbar > *,
+  .toolbar__group > * {
     flex: 0 0 auto;
     scroll-snap-align: start;
+  }
+
+  .toolbar__group {
+    flex-wrap: nowrap;
+  }
+
+  .toolbar__group-label {
+    width: auto;
+    min-width: max-content;
+    margin-right: 2px;
   }
 
   .btn,
@@ -797,7 +913,7 @@ body.body--overlay-open {
 
   .search {
     order: -1;
-    width: 100%;
+    width: auto;
   }
 
   .search__input {
@@ -909,6 +1025,11 @@ body.body--overlay-open {
     align-items: stretch;
   }
 
+  .settings-list__controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
   .settings-screen__search {
     max-width: none;
   }
@@ -924,14 +1045,26 @@ body.body--overlay-open {
     mask-image: none;
   }
 
-  .toolbar > * {
+  .toolbar > *,
+  .toolbar__group {
     flex: 1 1 calc(50% - var(--space-2));
     min-width: min(160px, 100%);
   }
 
+  .toolbar__status,
+  .toolbar__group--search,
   .search,
   .toolbar__status {
     flex-basis: 100%;
+  }
+
+  .toolbar__group {
+    align-items: stretch;
+  }
+
+  .toolbar__group > .btn,
+  .toolbar__group > .search {
+    width: 100%;
   }
 
   .grid {

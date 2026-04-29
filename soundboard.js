@@ -37,6 +37,10 @@
   const settingsSearchEl = document.getElementById('settings-search');
   const settingsSearchCountEl = document.getElementById('settings-search-count');
   const categoryOptionsEl = document.getElementById('category-options');
+  const settingsFeedbackEl = document.getElementById('settings-feedback');
+  const settingsLoadMoreBtn = document.getElementById('settings-load-more');
+  const settingsRenderedCountEl = document.getElementById('settings-rendered-count');
+  const settingsClearSearchBtn = document.getElementById('settings-clear-search');
 
   function getBoardJsonPath() {
     const base = window.location.pathname.replace(/\/[^/]*$/, '') || '/';
@@ -46,9 +50,13 @@
   const CATEGORY_UI_KEY_PREFIX = 'soundboard-category-state:';
   const CATEGORY_ORDER_KEY_PREFIX = 'soundboard-category-order:';
   const AUTO_LEVEL_KEY = 'soundboard-auto-level';
+  const SETTINGS_BATCH_SIZE = 80;
   let searchQuery = '';
   let categoryUiState = {};
   let categoryOrder = [];
+  let settingsDirty = false;
+  let settingsRenderIndex = 0;
+  let settingsPreviouslyFocused = null;
 
   function getCategoryStorageKey() {
     const boardId = currentBoard && currentBoard.id ? String(currentBoard.id) : 'default';
@@ -106,6 +114,124 @@
       .replace(/"/g, '&quot;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
+  }
+
+  function normalizeHotkeyInput(value) {
+    const text = String(value == null ? '' : value).trim().toUpperCase();
+    if (!text) return '';
+    const char = text.charAt(0);
+    if (!/^[A-Z0-9]$/.test(char)) return '';
+    return char;
+  }
+
+  function clearSettingsFeedback() {
+    if (!settingsFeedbackEl) return;
+    settingsFeedbackEl.textContent = '';
+    settingsFeedbackEl.classList.remove('settings-screen__feedback--error', 'settings-screen__feedback--success');
+  }
+
+  function setSettingsFeedback(message, kind) {
+    if (!settingsFeedbackEl) return;
+    settingsFeedbackEl.textContent = message || '';
+    settingsFeedbackEl.classList.remove('settings-screen__feedback--error', 'settings-screen__feedback--success');
+    if (kind === 'error') settingsFeedbackEl.classList.add('settings-screen__feedback--error');
+    if (kind === 'success') settingsFeedbackEl.classList.add('settings-screen__feedback--success');
+  }
+
+  function clearSettingsValidationState() {
+    if (!settingsListEl) return;
+    const rows = Array.from(settingsListEl.querySelectorAll('.settings-row'));
+    rows.forEach((row) => {
+      row.classList.remove('settings-row--invalid');
+      const rowError = row.querySelector('.settings-row__error');
+      if (rowError) rowError.textContent = '';
+      row.querySelectorAll('.field__input--invalid').forEach((el) => el.classList.remove('field__input--invalid'));
+    });
+  }
+
+  function setSettingsRowError(row, fieldName, message) {
+    if (!row) return;
+    row.classList.add('settings-row--invalid');
+    if (fieldName) {
+      const field = row.querySelector('[data-field="' + fieldName + '"]');
+      if (field && field.classList) field.classList.add('field__input--invalid');
+    }
+    const rowError = row.querySelector('.settings-row__error');
+    if (rowError) rowError.textContent = message;
+  }
+
+  function setSettingsDirty(isDirty) {
+    settingsDirty = !!isDirty;
+    if (!settingsDirty && settingsFeedbackEl && settingsFeedbackEl.classList.contains('settings-screen__feedback--error')) {
+      clearSettingsFeedback();
+    }
+  }
+
+  function hasUnsavedSettingsChanges() {
+    return !!settingsDirty;
+  }
+
+  function updateSettingsRenderedCount() {
+    if (!settingsRenderedCountEl || !currentBoard || !Array.isArray(currentBoard.sounds)) return;
+    const total = currentBoard.sounds.length;
+    settingsRenderedCountEl.textContent = 'Loaded ' + settingsRenderIndex + ' of ' + total + ' rows';
+  }
+
+  function updateSettingsLoadMoreVisibility() {
+    if (!settingsLoadMoreBtn || !currentBoard || !Array.isArray(currentBoard.sounds)) return;
+    const hasMore = settingsRenderIndex < currentBoard.sounds.length;
+    settingsLoadMoreBtn.hidden = !hasMore;
+  }
+
+  function buildSettingsRow(sound, idx) {
+    const row = document.createElement('article');
+    row.className = 'settings-row';
+    row.dataset.soundId = sound.id;
+    row.dataset.searchText = [
+      sound.title || '',
+      sound.category || '',
+      sound.fileUrl || '',
+      sound.imageUrl || '',
+      sound.hotkey || ''
+    ].join(' ').toLowerCase();
+    row.innerHTML = ''
+      + '<div class="settings-row__top">'
+      + '  <div class="settings-row__name">' + escapeAttr((idx + 1) + '. ' + (sound.title || 'Untitled')) + '</div>'
+      + '  <label class="settings-row__delete"><input type="checkbox" data-field="delete"> Delete</label>'
+      + '</div>'
+      + '<div class="settings-row__grid">'
+      + '  <label><span class="field__label">Title</span><input class="field__input" data-field="title" type="text" value="' + escapeAttr(sound.title || '') + '"></label>'
+      + '  <label><span class="field__label">Audio URL</span><input class="field__input" data-field="fileUrl" type="text" value="' + escapeAttr(sound.fileUrl || '') + '"></label>'
+      + '  <label><span class="field__label">Image URL</span><input class="field__input" data-field="imageUrl" type="text" value="' + escapeAttr(sound.imageUrl || '') + '"></label>'
+      + '  <label><span class="field__label">Category</span><input class="field__input" data-field="category" type="text" list="category-options" value="' + escapeAttr(sound.category || '') + '"></label>'
+      + '  <label><span class="field__label">Hotkey (A-Z or 0-9)</span><input class="field__input" data-field="hotkey" maxlength="1" type="text" value="' + escapeAttr(normalizeHotkeyInput(sound.hotkey || '')) + '"></label>'
+      + '  <label><span class="field__label">Volume %</span><input class="field__input" data-field="volume" type="number" min="0" max="100" step="1" value="' + escapeAttr(Math.round((sound.volume != null ? sound.volume : 1) * 100)) + '"></label>'
+      + '  <label><span class="field__label">Speed</span><input class="field__input" data-field="playbackRate" type="number" min="0.5" max="2" step="0.1" value="' + escapeAttr(sound.playbackRate != null ? sound.playbackRate : 1) + '"></label>'
+      + '  <label><span class="field__label">Start sec</span><input class="field__input" data-field="startSec" type="number" min="0" step="0.01" value="' + escapeAttr(sound.startMs != null ? (sound.startMs / 1000) : '') + '"></label>'
+      + '  <label><span class="field__label">End sec</span><input class="field__input" data-field="endSec" type="number" min="0" step="0.01" value="' + escapeAttr(sound.endMs != null ? (sound.endMs / 1000) : '') + '"></label>'
+      + '  <label class="field--checkbox"><input data-field="loop" type="checkbox"' + (sound.loop ? ' checked' : '') + '><span class="field__label">Loop</span></label>'
+      + '  <label class="field--checkbox"><input data-field="momentary" type="checkbox"' + (sound.momentary ? ' checked' : '') + '><span class="field__label">Momentary</span></label>'
+      + '</div>'
+      + '<p class="settings-row__error" aria-live="polite"></p>';
+    return row;
+  }
+
+  function appendSettingsRows(limit) {
+    if (!settingsListEl || !currentBoard || !Array.isArray(currentBoard.sounds)) return;
+    const sounds = currentBoard.sounds;
+    const target = Math.min(sounds.length, settingsRenderIndex + Math.max(1, limit || SETTINGS_BATCH_SIZE));
+    for (let i = settingsRenderIndex; i < target; i += 1) {
+      settingsListEl.appendChild(buildSettingsRow(sounds[i], i));
+    }
+    settingsRenderIndex = target;
+    updateSettingsRenderedCount();
+    updateSettingsLoadMoreVisibility();
+  }
+
+  function ensureAllSettingsRowsRendered() {
+    if (!currentBoard || !Array.isArray(currentBoard.sounds)) return;
+    const remaining = currentBoard.sounds.length - settingsRenderIndex;
+    if (remaining > 0) appendSettingsRows(remaining);
   }
 
   function soundMatchesQuery(sound, q) {
@@ -220,19 +346,32 @@
     hotkeyMap.clear();
     if (!currentBoard || !currentBoard.sounds) return;
     currentBoard.sounds.forEach((s) => {
-      const key = (s.hotkey || '').trim().toUpperCase();
-      if (key) hotkeyMap.set(key, s);
+      const key = normalizeHotkeyInput(s.hotkey || '');
+      s.hotkey = key;
+      if (!key) return;
+      if (!hotkeyMap.has(key)) hotkeyMap.set(key, s);
     });
+  }
+
+  function getHotkeyCounts(sounds) {
+    const counts = new Map();
+    (Array.isArray(sounds) ? sounds : []).forEach((s) => {
+      const key = normalizeHotkeyInput(s && s.hotkey);
+      if (!key) return;
+      counts.set(key, (counts.get(key) || 0) + 1);
+    });
+    return counts;
   }
 
   function render() {
     if (!UI || !gridEl) return;
     const allSounds = currentBoard ? currentBoard.sounds : [];
     const filtered = getFilteredSounds();
+    const hotkeyCounts = getHotkeyCounts(allSounds);
     updateSearchCount(filtered.length, Array.isArray(allSounds) ? allSounds.length : 0);
 
     if (!Array.isArray(allSounds) || allSounds.length === 0) {
-      UI.renderGrid(gridEl, [], playingId, errorIds, onPlay, onEditSound, reorderMode, reorderSounds);
+      UI.renderGrid(gridEl, [], playingId, errorIds, onPlay, onEditSound, reorderMode, reorderSounds, { hotkeyCounts });
       updateReorderButton();
       return;
     }
@@ -248,6 +387,7 @@
         onEditSound,
         reorderMode,
         null,
+        { hotkeyCounts },
         {
           isCollapsed: (key) => categoryUiState && categoryUiState[String(key)] === false,
           onToggleCategory: (key) => {
@@ -262,7 +402,7 @@
         }
       );
     } else {
-      UI.renderGrid(gridEl, filtered, playingId, errorIds, onPlay, onEditSound, reorderMode, reorderSounds);
+      UI.renderGrid(gridEl, filtered, playingId, errorIds, onPlay, onEditSound, reorderMode, reorderSounds, { hotkeyCounts });
     }
     updateReorderButton();
   }
@@ -474,7 +614,7 @@
       if (isLocal && uploadedHint) uploadedHint.textContent = 'Audio: your uploaded file (saved)';
       modalForm.querySelector('[name="imageUrl"]').value = sound ? sound.imageUrl || '' : '';
       modalForm.querySelector('[name="category"]').value = sound ? sound.category || '' : '';
-      modalForm.querySelector('[name="hotkey"]').value = sound ? sound.hotkey || '' : '';
+      modalForm.querySelector('[name="hotkey"]').value = sound ? normalizeHotkeyInput(sound.hotkey || '') : '';
       const volPct = sound ? Math.round((sound.volume != null ? sound.volume : 1) * 100) : 100;
       modalForm.querySelector('[name="volume"]').value = String(volPct);
       const speed = sound && sound.playbackRate != null ? sound.playbackRate : 1;
@@ -624,43 +764,25 @@
     syncOverlayBodyLock();
   }
 
+  function confirmDiscardSettingsChanges() {
+    return window.confirm('You have unsaved settings changes. Discard them?');
+  }
+
   function openSettingsScreen() {
     if (!settingsScreenEl || !settingsListEl || !currentBoard) return;
+    if (!settingsScreenEl.hidden) {
+      focusWithoutScroll(settingsSearchEl);
+      return;
+    }
     settingsListEl.textContent = '';
     if (settingsSearchEl) settingsSearchEl.value = '';
     if (settingsSearchCountEl) settingsSearchCountEl.textContent = '';
-    const sounds = Array.isArray(currentBoard.sounds) ? currentBoard.sounds : [];
-    sounds.forEach((sound, idx) => {
-      const row = document.createElement('article');
-      row.className = 'settings-row';
-      row.dataset.soundId = sound.id;
-      row.dataset.searchText = [
-        sound.title || '',
-        sound.category || '',
-        sound.fileUrl || '',
-        sound.imageUrl || '',
-        sound.hotkey || ''
-      ].join(' ').toLowerCase();
-      row.innerHTML = ''
-        + '<div class="settings-row__top">'
-        + '  <div class="settings-row__name">' + escapeAttr((idx + 1) + '. ' + (sound.title || 'Untitled')) + '</div>'
-        + '  <label class="settings-row__delete"><input type="checkbox" data-field="delete"> Delete</label>'
-        + '</div>'
-        + '<div class="settings-row__grid">'
-        + '  <label><span class="field__label">Title</span><input class="field__input" data-field="title" type="text" value="' + escapeAttr(sound.title || '') + '"></label>'
-        + '  <label><span class="field__label">Audio URL</span><input class="field__input" data-field="fileUrl" type="text" value="' + escapeAttr(sound.fileUrl || '') + '"></label>'
-        + '  <label><span class="field__label">Image URL</span><input class="field__input" data-field="imageUrl" type="text" value="' + escapeAttr(sound.imageUrl || '') + '"></label>'
-        + '  <label><span class="field__label">Category</span><input class="field__input" data-field="category" type="text" list="category-options" value="' + escapeAttr(sound.category || '') + '"></label>'
-        + '  <label><span class="field__label">Hotkey</span><input class="field__input" data-field="hotkey" maxlength="1" type="text" value="' + escapeAttr(sound.hotkey || '') + '"></label>'
-        + '  <label><span class="field__label">Volume %</span><input class="field__input" data-field="volume" type="number" min="0" max="100" step="1" value="' + escapeAttr(Math.round((sound.volume != null ? sound.volume : 1) * 100)) + '"></label>'
-        + '  <label><span class="field__label">Speed</span><input class="field__input" data-field="playbackRate" type="number" min="0.5" max="2" step="0.1" value="' + escapeAttr(sound.playbackRate != null ? sound.playbackRate : 1) + '"></label>'
-        + '  <label><span class="field__label">Start sec</span><input class="field__input" data-field="startSec" type="number" min="0" step="0.01" value="' + escapeAttr(sound.startMs != null ? (sound.startMs / 1000) : '') + '"></label>'
-        + '  <label><span class="field__label">End sec</span><input class="field__input" data-field="endSec" type="number" min="0" step="0.01" value="' + escapeAttr(sound.endMs != null ? (sound.endMs / 1000) : '') + '"></label>'
-        + '  <label class="field--checkbox"><input data-field="loop" type="checkbox"' + (sound.loop ? ' checked' : '') + '><span class="field__label">Loop</span></label>'
-        + '  <label class="field--checkbox"><input data-field="momentary" type="checkbox"' + (sound.momentary ? ' checked' : '') + '><span class="field__label">Momentary</span></label>'
-        + '</div>';
-      settingsListEl.appendChild(row);
-    });
+    clearSettingsFeedback();
+    clearSettingsValidationState();
+    setSettingsDirty(false);
+    settingsRenderIndex = 0;
+    appendSettingsRows(SETTINGS_BATCH_SIZE);
+    settingsPreviouslyFocused = document.activeElement;
     filterSettingsRows('');
     settingsScreenEl.hidden = false;
     settingsScreenEl.setAttribute('aria-hidden', 'false');
@@ -669,12 +791,43 @@
     focusWithoutScroll(settingsSearchEl);
   }
 
-  function closeSettingsScreen() {
+  function closeSettingsScreen(options = {}) {
     if (!settingsScreenEl) return;
+    const force = !!options.force;
+    if (!force && hasUnsavedSettingsChanges() && !confirmDiscardSettingsChanges()) {
+      setSettingsFeedback('Continue editing or save your changes before closing.', 'error');
+      return false;
+    }
     settingsScreenEl.classList.remove('settings-screen--open');
     settingsScreenEl.hidden = true;
     settingsScreenEl.setAttribute('aria-hidden', 'true');
+    clearSettingsValidationState();
+    clearSettingsFeedback();
+    setSettingsDirty(false);
     syncOverlayBodyLock();
+    if (settingsPreviouslyFocused && typeof settingsPreviouslyFocused.focus === 'function') {
+      focusWithoutScroll(settingsPreviouslyFocused);
+    }
+    return true;
+  }
+
+  function trapFocusInSettingsScreen(e) {
+    if (!settingsScreenEl || settingsScreenEl.hidden || e.key !== 'Tab') return;
+    const focusables = Array.from(settingsScreenEl.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'))
+      .filter((el) => !el.disabled && el.offsetParent !== null);
+    if (focusables.length === 0) return;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    const active = document.activeElement;
+    if (e.shiftKey && active === first) {
+      e.preventDefault();
+      last.focus();
+      return;
+    }
+    if (!e.shiftKey && active === last) {
+      e.preventDefault();
+      first.focus();
+    }
   }
 
   function parseBlerpSoundId(url) {
@@ -855,8 +1008,23 @@
   function saveAllSettingsChanges(options = {}) {
     if (!settingsScreenEl || !settingsListEl || !currentBoard) return;
     const closeAfterSave = options.closeAfterSave !== false;
+    ensureAllSettingsRowsRendered();
+    clearSettingsValidationState();
+    clearSettingsFeedback();
     const rows = Array.from(settingsListEl.querySelectorAll('.settings-row'));
     const nextSounds = [];
+    const firstInvalid = { row: null, field: null };
+    const hotkeyOwners = new Map();
+    const pendingById = new Map();
+
+    function trackInvalid(row, field, message) {
+      setSettingsRowError(row, field, message);
+      if (!firstInvalid.row) {
+        firstInvalid.row = row;
+        firstInvalid.field = field;
+      }
+    }
+
     for (const row of rows) {
       const id = row.dataset.soundId;
       const existing = currentBoard.sounds.find((s) => s.id === id);
@@ -868,8 +1036,8 @@
       const title = ((row.querySelector('[data-field="title"]') || {}).value || '').trim();
       const fileUrl = ((row.querySelector('[data-field="fileUrl"]') || {}).value || '').trim();
       if (!title || !fileUrl) {
-        alert('Each kept sound needs a Title and Audio URL. Please fix and save again.');
-        return;
+        trackInvalid(row, !title ? 'title' : 'fileUrl', 'Each kept sound needs both Title and Audio URL.');
+        continue;
       }
 
       const volumeRaw = parseFloat(((row.querySelector('[data-field="volume"]') || {}).value || '100'));
@@ -879,32 +1047,86 @@
 
       const startRaw = ((row.querySelector('[data-field="startSec"]') || {}).value || '').trim();
       const endRaw = ((row.querySelector('[data-field="endSec"]') || {}).value || '').trim();
-      const startMs = startRaw === '' ? null : Math.round(parseFloat(startRaw) * 1000);
-      const endMs = endRaw === '' ? null : Math.round(parseFloat(endRaw) * 1000);
+      const startNum = startRaw === '' ? null : parseFloat(startRaw);
+      const endNum = endRaw === '' ? null : parseFloat(endRaw);
+      if ((startNum != null && isNaN(startNum)) || (endNum != null && isNaN(endNum))) {
+        trackInvalid(row, isNaN(startNum) ? 'startSec' : 'endSec', 'Start/End seconds must be valid numbers.');
+        continue;
+      }
+      const startMs = startNum == null ? null : Math.round(startNum * 1000);
+      const endMs = endNum == null ? null : Math.round(endNum * 1000);
       if (startMs != null && endMs != null && startMs >= endMs) {
-        alert('Start sec must be less than End sec.');
-        return;
+        trackInvalid(row, 'startSec', 'Start sec must be less than End sec.');
+        continue;
       }
 
-      existing.title = title;
-      existing.fileUrl = fileUrl;
-      existing.imageUrl = ((row.querySelector('[data-field="imageUrl"]') || {}).value || '').trim();
-      existing.category = ((row.querySelector('[data-field="category"]') || {}).value || '').trim();
-      existing.hotkey = ((row.querySelector('[data-field="hotkey"]') || {}).value || '').trim();
-      existing.volume = volume;
-      existing.playbackRate = playbackRate;
-      existing.startMs = startMs;
-      existing.endMs = endMs;
-      existing.loop = !!(row.querySelector('[data-field="loop"]') && row.querySelector('[data-field="loop"]').checked);
-      existing.momentary = !!(row.querySelector('[data-field="momentary"]') && row.querySelector('[data-field="momentary"]').checked);
+      const hotkeyRaw = ((row.querySelector('[data-field="hotkey"]') || {}).value || '').trim();
+      const hotkey = normalizeHotkeyInput(hotkeyRaw);
+      const hotkeyInput = row.querySelector('[data-field="hotkey"]');
+      if (hotkeyInput) hotkeyInput.value = hotkey;
+      if (hotkeyRaw && !hotkey) {
+        trackInvalid(row, 'hotkey', 'Hotkey must be one letter or number (A-Z, 0-9).');
+        continue;
+      }
+      if (hotkey) {
+        if (!hotkeyOwners.has(hotkey)) hotkeyOwners.set(hotkey, []);
+        hotkeyOwners.get(hotkey).push({ row, title });
+      }
+
+      pendingById.set(existing.id, {
+        title,
+        fileUrl,
+        imageUrl: ((row.querySelector('[data-field="imageUrl"]') || {}).value || '').trim(),
+        category: ((row.querySelector('[data-field="category"]') || {}).value || '').trim(),
+        hotkey,
+        volume,
+        playbackRate,
+        startMs,
+        endMs,
+        loop: !!(row.querySelector('[data-field="loop"]') && row.querySelector('[data-field="loop"]').checked),
+        momentary: !!(row.querySelector('[data-field="momentary"]') && row.querySelector('[data-field="momentary"]').checked)
+      });
       nextSounds.push(existing);
     }
+
+    hotkeyOwners.forEach((owners, key) => {
+      if (owners.length <= 1) return;
+      owners.forEach((owner) => {
+        trackInvalid(owner.row, 'hotkey', 'Hotkey "' + key + '" is used more than once. Choose unique keys.');
+      });
+    });
+
+    if (firstInvalid.row) {
+      setSettingsFeedback('Fix highlighted rows before saving.', 'error');
+      firstInvalid.row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      const invalidField = firstInvalid.row.querySelector('[data-field="' + firstInvalid.field + '"]');
+      focusWithoutScroll(invalidField || firstInvalid.row);
+      return;
+    }
+
+    nextSounds.forEach((sound) => {
+      const pending = pendingById.get(sound.id);
+      if (!pending) return;
+      sound.title = pending.title;
+      sound.fileUrl = pending.fileUrl;
+      sound.imageUrl = pending.imageUrl;
+      sound.category = pending.category;
+      sound.hotkey = pending.hotkey;
+      sound.volume = pending.volume;
+      sound.playbackRate = pending.playbackRate;
+      sound.startMs = pending.startMs;
+      sound.endMs = pending.endMs;
+      sound.loop = pending.loop;
+      sound.momentary = pending.momentary;
+    });
 
     currentBoard.sounds = nextSounds;
     buildHotkeyMap();
     saveToStorage();
     refreshCategorySuggestions();
-    if (closeAfterSave) closeSettingsScreen();
+    setSettingsDirty(false);
+    setSettingsFeedback('Settings saved successfully.', 'success');
+    if (closeAfterSave) closeSettingsScreen({ force: true });
     if (!closeAfterSave && downloadStatus) {
       downloadStatus.textContent = 'Settings saved.';
       setTimeout(function () { if (downloadStatus) downloadStatus.textContent = ''; }, 1400);
@@ -915,6 +1137,7 @@
   function filterSettingsRows(query) {
     if (!settingsListEl) return;
     const q = String(query || '').trim().toLowerCase();
+    if (q) ensureAllSettingsRowsRendered();
     const rows = Array.from(settingsListEl.querySelectorAll('.settings-row'));
     let shown = 0;
     rows.forEach((row) => {
@@ -924,8 +1147,10 @@
       if (visible) shown++;
     });
     if (settingsSearchCountEl) {
-      settingsSearchCountEl.textContent = q ? (shown + '/' + rows.length) : '';
+      settingsSearchCountEl.textContent = shown + '/' + rows.length;
     }
+    updateSettingsRenderedCount();
+    updateSettingsLoadMoreVisibility();
   }
 
   function handleUploadAudio(fileInput) {
@@ -982,20 +1207,39 @@
     const momentary = momentaryCheck ? momentaryCheck.checked : false;
     const startSecRaw = modalForm.querySelector('[name="startSec"]').value.trim();
     const endSecRaw = modalForm.querySelector('[name="endSec"]').value.trim();
-    const startMs = startSecRaw === '' ? null : Math.round(parseFloat(startSecRaw) * 1000);
-    const endMs = endSecRaw === '' ? null : Math.round(parseFloat(endSecRaw) * 1000);
+    const startSec = startSecRaw === '' ? null : parseFloat(startSecRaw);
+    const endSec = endSecRaw === '' ? null : parseFloat(endSecRaw);
+    if ((startSec != null && isNaN(startSec)) || (endSec != null && isNaN(endSec))) {
+      if (modalError) modalError.textContent = 'Start/End must be valid numbers.';
+      return;
+    }
+    const startMs = startSec == null ? null : Math.round(startSec * 1000);
+    const endMs = endSec == null ? null : Math.round(endSec * 1000);
     if (startMs != null && endMs != null && startMs >= endMs) {
       if (modalError) modalError.textContent = 'Start must be less than end.';
       return;
     }
+    const hotkeyRaw = (modalForm.querySelector('[name="hotkey"]').value || '').trim();
+    const hotkey = normalizeHotkeyInput(hotkeyRaw);
+    if (hotkeyRaw && !hotkey) {
+      if (modalError) modalError.textContent = 'Hotkey must be one letter or number (A-Z, 0-9).';
+      return;
+    }
 
     let sound = currentBoard.sounds.find((s) => s.id === id);
+    const conflict = hotkey
+      ? currentBoard.sounds.find((s) => s.id !== (sound ? sound.id : id) && normalizeHotkeyInput(s.hotkey) === hotkey)
+      : null;
+    if (conflict) {
+      if (modalError) modalError.textContent = 'Hotkey "' + hotkey + '" is already used by "' + (conflict.title || 'another sound') + '".';
+      return;
+    }
     if (sound) {
       sound.title = title;
       sound.fileUrl = fileUrl;
       sound.imageUrl = (modalForm.querySelector('[name="imageUrl"]').value || '').trim();
       sound.category = (modalForm.querySelector('[name="category"]').value || '').trim();
-      sound.hotkey = (modalForm.querySelector('[name="hotkey"]').value || '').trim();
+      sound.hotkey = hotkey;
       sound.volume = volume;
       sound.playbackRate = playbackRate;
       sound.loop = loop;
@@ -1016,7 +1260,7 @@
         momentary,
         startMs,
         endMs,
-        hotkey: (modalForm.querySelector('[name="hotkey"]').value || '').trim(),
+        hotkey,
         color: '#6b7280',
         extra: {}
       });
@@ -1375,18 +1619,43 @@
       const saveBtn = settingsScreenEl.querySelector('[data-action="settings-save"]');
       const cancelBtn = settingsScreenEl.querySelector('[data-action="settings-cancel"]');
       if (saveBtn) saveBtn.addEventListener('click', saveAllSettingsChanges);
-      if (cancelBtn) cancelBtn.addEventListener('click', closeSettingsScreen);
+      if (cancelBtn) cancelBtn.addEventListener('click', () => closeSettingsScreen());
       if (settingsSearchEl) {
         settingsSearchEl.addEventListener('input', function () {
           filterSettingsRows(settingsSearchEl.value || '');
         });
       }
+      if (settingsClearSearchBtn) {
+        settingsClearSearchBtn.addEventListener('click', function () {
+          if (settingsSearchEl) settingsSearchEl.value = '';
+          filterSettingsRows('');
+          focusWithoutScroll(settingsSearchEl);
+        });
+      }
+      if (settingsLoadMoreBtn) {
+        settingsLoadMoreBtn.addEventListener('click', function () {
+          appendSettingsRows(SETTINGS_BATCH_SIZE);
+          filterSettingsRows(settingsSearchEl ? settingsSearchEl.value : '');
+        });
+      }
+      settingsScreenEl.addEventListener('input', function (e) {
+        const t = e.target;
+        if (t && t.matches && t.matches('[data-field]')) setSettingsDirty(true);
+        if (t && t.matches && t.matches('[data-field="hotkey"]')) {
+          t.value = normalizeHotkeyInput(t.value);
+        }
+      });
+      settingsScreenEl.addEventListener('change', function (e) {
+        const t = e.target;
+        if (t && t.matches && t.matches('[data-field]')) setSettingsDirty(true);
+      });
       settingsScreenEl.addEventListener('keydown', function (e) {
+        trapFocusInSettingsScreen(e);
         if (e.key === 'Enter') {
           const t = e.target;
           if (t && (t.tagName || '').toLowerCase() === 'textarea') return;
           const type = (t && t.type ? String(t.type) : '').toLowerCase();
-          if (type === 'button' || type === 'checkbox') return;
+          if (type === 'button' || type === 'checkbox' || type === 'search') return;
           e.preventDefault();
           saveAllSettingsChanges({ closeAfterSave: false });
         }
@@ -1450,6 +1719,7 @@
     const moveDownBtn = modalForm.querySelector('[data-action="move-down"]');
     const volumeRange = modalForm.querySelector('[name="volume"]');
     const fileUrlInput = modalForm.querySelector('[name="fileUrl"]');
+    const hotkeyInput = modalForm.querySelector('[name="hotkey"]');
     modalForm.addEventListener('submit', function (e) {
       e.preventDefault();
       saveSoundFromModal();
@@ -1471,6 +1741,11 @@
     const speedRange = modalForm.querySelector('[name="playbackRate"]');
     if (speedRange) speedRange.addEventListener('input', function () { updateSpeedValue(parseFloat(speedRange.value)); });
     if (fileUrlInput && Audio) fileUrlInput.addEventListener('blur', soundFromFormForDuration);
+    if (hotkeyInput) {
+      hotkeyInput.addEventListener('input', function () {
+        hotkeyInput.value = normalizeHotkeyInput(hotkeyInput.value);
+      });
+    }
     const uploadInput = document.getElementById('upload-audio-input');
     if (uploadInput) uploadInput.addEventListener('change', function () { handleUploadAudio(uploadInput); });
     initTrimBarDrag();
@@ -1486,7 +1761,10 @@
         closeSettingsScreen();
         return;
       }
+      if (modalEl && !modalEl.hidden) return;
       if (settingsScreenEl && !settingsScreenEl.hidden) return;
+      if (e.repeat) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.target && (e.target.closest('input') || e.target.closest('textarea'))) return;
       const key = (e.key || '').toUpperCase();
       const sound = key ? hotkeyMap.get(key) : null;
@@ -1502,6 +1780,7 @@
       }
     });
     document.addEventListener('keyup', (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
       const key = (e.key || '').toUpperCase();
       if (!activeMomentaryKeys.has(key)) return;
       activeMomentaryKeys.delete(key);

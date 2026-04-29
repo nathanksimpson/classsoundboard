@@ -8,7 +8,7 @@ function escapeText(str) {
   return String(str);
 }
 
-function renderTile(sound, state, index, reorderMode) {
+function renderTile(sound, state, index, reorderMode, renderOptions = {}) {
   const stateClass = state === 'playing' ? 'tile--playing' : state === 'error' ? 'tile--error' : 'tile--idle';
   const reorderClass = reorderMode ? ' tile--reorder' : '';
   const title = escapeText(sound.title);
@@ -24,7 +24,9 @@ function renderTile(sound, state, index, reorderMode) {
   el.dataset.soundId = sound.id;
   el.dataset.index = String(index);
   el.style.cssText = bgStyle;
-  el.setAttribute('aria-label', reorderMode ? 'Drag to reorder: ' + title : 'Play ' + title);
+  const hotkeyText = sound && sound.hotkey ? (' hotkey ' + String(sound.hotkey).toUpperCase()) : '';
+  const momentaryText = sound && sound.momentary ? ' momentary hold mode' : '';
+  el.setAttribute('aria-label', reorderMode ? 'Drag to reorder: ' + title : ('Play ' + title + hotkeyText + momentaryText));
   if (reorderMode) el.setAttribute('draggable', 'true');
 
   if (reorderMode) {
@@ -39,6 +41,31 @@ function renderTile(sound, state, index, reorderMode) {
   label.className = 'tile__label';
   label.textContent = title;
   el.appendChild(label);
+
+  const normalizedHotkey = String(sound && sound.hotkey ? sound.hotkey : '').trim().toUpperCase();
+  const hotkeyCounts = renderOptions.hotkeyCounts instanceof Map ? renderOptions.hotkeyCounts : new Map();
+  const isHotkeyConflict = normalizedHotkey && (hotkeyCounts.get(normalizedHotkey) || 0) > 1;
+  if (!reorderMode && (normalizedHotkey || sound.momentary)) {
+    const meta = document.createElement('div');
+    meta.className = 'tile__meta';
+    if (normalizedHotkey) {
+      const keyBadge = document.createElement('span');
+      keyBadge.className = 'tile__badge';
+      keyBadge.textContent = isHotkeyConflict ? ('!' + normalizedHotkey) : normalizedHotkey;
+      keyBadge.title = isHotkeyConflict
+        ? 'Hotkey conflict: this key is assigned multiple times'
+        : ('Hotkey: ' + normalizedHotkey);
+      meta.appendChild(keyBadge);
+    }
+    if (sound.momentary) {
+      const momentaryBadge = document.createElement('span');
+      momentaryBadge.className = 'tile__badge';
+      momentaryBadge.textContent = 'HOLD';
+      momentaryBadge.title = 'Momentary mode: play while holding';
+      meta.appendChild(momentaryBadge);
+    }
+    el.appendChild(meta);
+  }
 
   if (!reorderMode) {
     const editBtn = document.createElement('button');
@@ -67,7 +94,7 @@ function renderTile(sound, state, index, reorderMode) {
   return el;
 }
 
-function renderGrid(container, sounds, playState, errorIds, onPlay, onEdit, reorderMode, onReorder) {
+function renderGrid(container, sounds, playState, errorIds, onPlay, onEdit, reorderMode, onReorder, renderOptions = {}) {
   if (!container) return;
   container.classList.remove('grid-groups');
   container.classList.add('grid');
@@ -84,7 +111,7 @@ function renderGrid(container, sounds, playState, errorIds, onPlay, onEdit, reor
 
   sounds.forEach((s, i) => {
     const state = playState === s.id ? 'playing' : (errorIds && errorIds.has(s.id)) ? 'error' : 'idle';
-    const tile = renderTile(s, state, i, reorder);
+    const tile = renderTile(s, state, i, reorder, renderOptions);
     const isMomentary = !!(s && s.momentary);
 
     tile.addEventListener('click', (e) => {
@@ -185,7 +212,7 @@ function updateTileState(container, soundId, state) {
   if (state !== 'error' && err) err.remove();
 }
 
-function renderGroupedGrid(container, groups, playState, errorIds, onPlay, onEdit, reorderMode, onReorder, options = {}) {
+function renderGroupedGrid(container, groups, playState, errorIds, onPlay, onEdit, reorderMode, onReorder, renderOptions = {}, options = {}) {
   if (!container) return;
   container.classList.remove('grid');
   container.classList.add('grid-groups');
@@ -302,7 +329,8 @@ function renderGroupedGrid(container, groups, playState, errorIds, onPlay, onEdi
           if (!moving || !target) return;
           const place = fromIndex < toIndex ? 'after' : 'before';
           onReorderSound(moving.id, key, target.id, place);
-        }
+        },
+        renderOptions
       );
       body.addEventListener('dragover', (e) => {
         e.preventDefault();
@@ -315,7 +343,7 @@ function renderGroupedGrid(container, groups, playState, errorIds, onPlay, onEdi
         onReorderSound(movingId, key, last ? last.id : null, 'after');
       });
     } else {
-      renderGrid(grid, sounds, playState, errorIds, onPlay, onEdit, false, null);
+      renderGrid(grid, sounds, playState, errorIds, onPlay, onEdit, false, null, renderOptions);
     }
 
     section.appendChild(header);

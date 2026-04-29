@@ -9,27 +9,44 @@
 <body>
   <header class="header">
     <h1 id="board-name" class="header__title" title="Click to change board name">Soundboard</h1>
+    <p class="header__hint">Tip: click the board name to rename it.</p>
     <div id="toolbar" class="toolbar">
-      <button type="button" class="btn btn--primary" data-action="add">Add Sound</button>
-      <div class="search" role="search" aria-label="Search sounds">
-        <input type="search" id="search-input" class="search__input" placeholder="Search (title or category)…" aria-label="Search sounds by title or category">
-        <button type="button" id="search-clear" class="search__clear" aria-label="Clear search" title="Clear">×</button>
-        <span class="search__count" id="search-count" aria-live="polite"></span>
+      <div class="toolbar__group toolbar__group--create-edit" aria-label="Create and edit tools">
+        <span class="toolbar__group-label">Create/Edit</span>
+        <button type="button" class="btn btn--primary" data-action="add">Add Sound</button>
+        <button type="button" class="btn btn--secondary" data-action="web-add" title="Paste a Blerp or YouTube link to auto-import">Add Web Sound</button>
+        <button type="button" class="btn btn--secondary" data-action="settings-open" title="Edit all sounds in one long list">Manage All Sounds</button>
+        <button type="button" class="btn btn--secondary" id="reorder-toggle" data-action="reorder-toggle" title="Toggle reorder mode to drag and drop tiles">Reorder</button>
       </div>
-      <label class="btn btn--secondary">
-        Import Board
-        <input type="file" id="import-input" accept=".json" hidden>
-      </label>
-      <button type="button" class="btn btn--secondary" data-action="export">Export Board</button>
-      <button type="button" class="btn btn--secondary" data-action="download-sounds" title="Download each sound, save to a folder (or into the app), then update the board to use local copies">Download all sounds</button>
-      <button type="button" class="btn btn--secondary" data-action="web-add" title="Paste a Blerp or YouTube link to auto-import">Add Web Sound</button>
-      <button type="button" class="btn btn--secondary" data-action="settings-open" title="Edit all sounds in one long list">Board settings</button>
-      <label class="btn btn--secondary auto-level" title="Automatically level sound volumes">
-        <input type="checkbox" id="auto-level-toggle" class="auto-level__check" checked>
-        <span class="auto-level__label">Auto level</span>
-      </label>
-      <button type="button" class="btn btn--secondary" data-action="analyze-all" title="Analyze all sounds for consistent volume (recommended once per board)">Analyze all</button>
-      <button type="button" class="btn btn--secondary" id="reorder-toggle" data-action="reorder-toggle" title="Toggle reorder mode to drag and drop tiles">Reorder</button>
+
+      <div class="toolbar__group toolbar__group--board-file" aria-label="Board file tools">
+        <span class="toolbar__group-label">Board File</span>
+        <label class="btn btn--secondary">
+          Import Board
+          <input type="file" id="import-input" accept=".json" hidden>
+        </label>
+        <button type="button" class="btn btn--secondary" data-action="export">Export Board</button>
+      </div>
+
+      <div class="toolbar__group toolbar__group--audio-tools" aria-label="Audio tools">
+        <span class="toolbar__group-label">Audio Tools</span>
+        <button type="button" class="btn btn--secondary" data-action="download-sounds" title="Download each sound, save to a folder (or into the app), then update the board to use local copies">Download all sounds</button>
+        <label class="btn btn--secondary auto-level" title="Automatically level sound volumes">
+          <input type="checkbox" id="auto-level-toggle" class="auto-level__check" checked>
+          <span class="auto-level__label">Auto level</span>
+        </label>
+        <button type="button" class="btn btn--secondary" data-action="analyze-all" title="Analyze all sounds for consistent volume (recommended once per board)">Analyze all</button>
+      </div>
+
+      <div class="toolbar__group toolbar__group--search" aria-label="Search tools">
+        <span class="toolbar__group-label">Search</span>
+        <div class="search" role="search" aria-label="Search sounds">
+          <input type="search" id="search-input" class="search__input" placeholder="Search (title or category)…" aria-label="Search sounds by title or category">
+          <button type="button" id="search-clear" class="search__clear" aria-label="Clear search" title="Clear search">Clear</button>
+          <span class="search__count" id="search-count" aria-live="polite"></span>
+        </div>
+      </div>
+
       <span class="toolbar__status" id="download-status" aria-live="polite"></span>
     </div>
     <div class="header__global-volume" id="global-volume-wrap" title="Master volume">
@@ -51,21 +68,27 @@
     <button type="button" class="quick-bar__btn" data-action="quick-analyze">Analyze</button>
   </nav>
 
-  <section id="settings-screen" class="settings-screen" hidden aria-hidden="true">
+  <section id="settings-screen" class="settings-screen" role="dialog" aria-modal="true" aria-labelledby="settings-screen-title" hidden aria-hidden="true">
     <div class="settings-screen__backdrop"></div>
     <div class="settings-screen__panel">
       <header class="settings-screen__header">
-        <h2 class="settings-screen__title">Board Settings (All Sounds)</h2>
+        <h2 id="settings-screen-title" class="settings-screen__title">Manage All Sounds (Bulk Editor)</h2>
         <div class="settings-screen__actions">
           <button type="button" class="btn btn--secondary" data-action="settings-cancel">Cancel</button>
           <button type="button" class="btn btn--primary" data-action="settings-save">Save all changes</button>
         </div>
       </header>
       <div class="settings-screen__toolbar">
-        <input type="search" id="settings-search" class="field__input settings-screen__search" placeholder="Search settings rows (title, category, URL, hotkey)...">
+        <input type="search" id="settings-search" class="field__input settings-screen__search" placeholder="Search settings rows (title, category, URL, hotkey)..." aria-label="Search all settings rows">
+        <button type="button" class="btn btn--secondary settings-screen__clear" id="settings-clear-search">Clear</button>
         <span id="settings-search-count" class="settings-screen__count" aria-live="polite"></span>
       </div>
-      <p class="settings-screen__hint">Edit all sounds in one scrollable list. Remove a sound by checking “Delete”. Press Enter to save and continue editing.</p>
+      <p class="settings-screen__hint">Edit all sounds in one scrollable list. Remove a sound by checking “Delete”. Press Enter to save and continue editing. Hotkeys must be unique.</p>
+      <p id="settings-feedback" class="settings-screen__feedback" aria-live="polite"></p>
+      <div class="settings-list__controls">
+        <span id="settings-rendered-count" class="settings-list__count" aria-live="polite"></span>
+        <button type="button" class="btn btn--secondary settings-list__more" id="settings-load-more">Load more rows</button>
+      </div>
       <div id="settings-list" class="settings-list"></div>
     </div>
   </section>

@@ -233,9 +233,16 @@
   let settingsPreviouslyFocused = null;
   let analyzeInProgress = false;
 
+  function hasTranslationKey(key) {
+    const dict = I18N[currentLanguage] || {};
+    if (Object.prototype.hasOwnProperty.call(dict, key)) return true;
+    return Object.prototype.hasOwnProperty.call(I18N.en || {}, key);
+  }
+
   function t(key, vars = {}) {
     const dict = I18N[currentLanguage] || I18N.en;
-    const template = dict[key] || I18N.en[key] || key;
+    const template = dict[key] || I18N.en[key];
+    if (template == null) return null;
     return String(template).replace(/\{([a-zA-Z0-9_]+)\}/g, (_, name) => {
       return Object.prototype.hasOwnProperty.call(vars, name) ? String(vars[name]) : '';
     });
@@ -245,20 +252,23 @@
     const textEls = Array.from(document.querySelectorAll('[data-i18n]'));
     textEls.forEach((el) => {
       const key = el.getAttribute('data-i18n');
-      if (!key) return;
-      el.textContent = t(key);
+      if (!key || !hasTranslationKey(key)) return;
+      const translated = t(key);
+      if (translated != null) el.textContent = translated;
     });
     const titleEls = Array.from(document.querySelectorAll('[data-i18n-title]'));
     titleEls.forEach((el) => {
       const key = el.getAttribute('data-i18n-title');
-      if (!key) return;
-      el.title = t(key);
+      if (!key || !hasTranslationKey(key)) return;
+      const translated = t(key);
+      if (translated != null) el.title = translated;
     });
     const placeholderEls = Array.from(document.querySelectorAll('[data-i18n-placeholder]'));
     placeholderEls.forEach((el) => {
       const key = el.getAttribute('data-i18n-placeholder');
-      if (!key) return;
-      el.setAttribute('placeholder', t(key));
+      if (!key || !hasTranslationKey(key)) return;
+      const translated = t(key);
+      if (translated != null) el.setAttribute('placeholder', translated);
     });
     if (searchInputEl) {
       searchInputEl.setAttribute('aria-label', currentLanguage === 'ko'

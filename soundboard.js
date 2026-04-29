@@ -2008,10 +2008,16 @@
       if (Storage && Storage.clearBoard) Storage.clearBoard();
     } catch (_) {}
     try {
+      localStorage.removeItem('soundboard-board');
       const keysToDelete = [];
       for (let i = 0; i < localStorage.length; i += 1) {
         const k = localStorage.key(i);
-        if (k && (k.startsWith('soundboard-category-state:') || k.startsWith('soundboard-category-order:') || k === AUTO_LEVEL_KEY)) {
+        if (k && (
+          k.startsWith('soundboard-category-state:')
+          || k.startsWith('soundboard-category-order:')
+          || k === AUTO_LEVEL_KEY
+          || k === LANGUAGE_KEY
+        )) {
           keysToDelete.push(k);
         }
       }
@@ -2019,13 +2025,25 @@
     } catch (_) {}
     clearLocalAudioDatabase().finally(function () {
       if (Audio && Audio.clearCache) Audio.clearCache();
-      loadInitialBoard();
-      if (downloadStatus) {
-        downloadStatus.textContent = t('status.clearedAllData');
-        setTimeout(function () {
-          if (downloadStatus) downloadStatus.textContent = '';
-        }, 2200);
-      }
+      const url = getBoardJsonPath();
+      fetch(url, { cache: 'no-store' })
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error('Failed to load board'))))
+        .then((data) => {
+          const result = Board.validateBoard(data);
+          if (!result.ok) throw new Error(result.error);
+          setBoard(Board.normalizeBoard(data));
+        })
+        .catch(() => {
+          loadInitialBoard();
+        })
+        .finally(() => {
+          if (downloadStatus) {
+            downloadStatus.textContent = t('status.clearedAllData');
+            setTimeout(function () {
+              if (downloadStatus) downloadStatus.textContent = '';
+            }, 2200);
+          }
+        });
     });
   }
 

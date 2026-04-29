@@ -22,13 +22,13 @@
 
       <div class="toolbar__group toolbar__group--board-file" aria-label="Board file tools">
         <span class="toolbar__group-label" data-i18n="toolbar.group.board">Board File</span>
-        <label class="btn btn--secondary">
-          <span data-i18n="toolbar.import">Import Board</span>
-          <input type="file" id="import-input" accept=".json" hidden>
-        </label>
+        <input type="file" id="import-input" accept=".json" hidden>
         <button type="button" class="btn btn--secondary" data-action="export" data-i18n="toolbar.export">Export Board</button>
+        <button type="button" class="btn btn--danger" data-action="clear-data" data-i18n="toolbar.clearData" data-i18n-title="toolbar.clearDataTitle" title="Clear all saved board/app data and reset to defaults">
+          Clear All Data
+        </button>
         <button type="button" id="import-dropzone" class="import-dropzone" data-i18n="toolbar.importDropzone" data-i18n-title="toolbar.importDropzoneTitle" title="Drop a .json board file here, or click to choose one">
-          Drop .json board file here (or click)
+          Import Sounds (Drag and drop or click)
         </button>
       </div>
 

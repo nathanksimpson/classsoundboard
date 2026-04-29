@@ -145,6 +145,11 @@ body.body--overlay-open {
   background: rgba(74, 158, 255, 0.2);
 }
 
+.toolbar__group--drop-active {
+  border-color: rgba(74, 158, 255, 0.7);
+  box-shadow: 0 0 0 1px rgba(74, 158, 255, 0.25) inset;
+}
+
 @media (max-width: 1100px) {
   .import-dropzone {
     display: none;

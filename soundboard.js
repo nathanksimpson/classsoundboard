@@ -68,10 +68,11 @@
       'toolbar.reorderTitle': 'Toggle reorder mode to drag and drop tiles',
       'toolbar.help': 'How to Use',
       'toolbar.group.board': 'Board File',
-      'toolbar.import': 'Import Board',
       'toolbar.export': 'Export Board',
-      'toolbar.importDropzone': 'Drop .json board file here (or click)',
-      'toolbar.importDropzoneTitle': 'Drop a .json board file here, or click to choose one',
+      'toolbar.clearData': 'Clear All Data',
+      'toolbar.clearDataTitle': 'Clear all saved board/app data and reset to defaults',
+      'toolbar.importDropzone': 'Import Sounds (Drag and drop or click)',
+      'toolbar.importDropzoneTitle': 'Import sounds: drag and drop a .json board file, or click to choose one',
       'toolbar.group.audio': 'Audio Tools',
       'toolbar.downloadAll': 'Download all sounds',
       'toolbar.downloadAllTitle': 'Download each sound, save to a folder (or into the app), then update the board to use local copies',
@@ -129,6 +130,8 @@
       'status.analyzingProgress': 'Analyzing {current}/{total}…',
       'status.analyzeComplete': 'Analyze complete.',
       'status.invalidImportFile': 'Please drop a valid .json board file.',
+      'status.clearedAllData': 'All saved data cleared. Loaded default board.',
+      'confirm.clearAllData': 'Clear all saved data (board, settings, local audio cache) and reset to defaults?',
       'board.defaultName': 'Soundboard',
       'board.renameTitle': 'Click to change board name',
       'ui.dragToReorderPrefix': 'Drag to reorder',
@@ -148,10 +151,11 @@
       'toolbar.reorderTitle': '순서 변경 모드를 켜고 타일을 드래그하세요',
       'toolbar.help': '사용 방법',
       'toolbar.group.board': '보드 파일',
-      'toolbar.import': '보드 가져오기',
       'toolbar.export': '보드 내보내기',
-      'toolbar.importDropzone': '.json 보드 파일을 여기에 드롭하세요 (또는 클릭)',
-      'toolbar.importDropzoneTitle': '.json 보드 파일을 여기에 드롭하거나 클릭해 선택하세요',
+      'toolbar.clearData': '전체 데이터 삭제',
+      'toolbar.clearDataTitle': '저장된 보드/앱 데이터를 모두 삭제하고 기본값으로 재설정',
+      'toolbar.importDropzone': '사운드 가져오기 (드래그 앤 드롭 또는 클릭)',
+      'toolbar.importDropzoneTitle': '사운드 가져오기: .json 보드 파일을 드래그 앤 드롭하거나 클릭해 선택하세요',
       'toolbar.group.audio': '오디오 도구',
       'toolbar.downloadAll': '모든 사운드 다운로드',
       'toolbar.downloadAllTitle': '각 사운드를 다운로드하여 폴더(또는 앱)로 저장 후 로컬 파일로 업데이트',
@@ -209,6 +213,8 @@
       'status.analyzingProgress': '{current}/{total} 분석 중…',
       'status.analyzeComplete': '분석 완료.',
       'status.invalidImportFile': '올바른 .json 보드 파일을 드롭해 주세요.',
+      'status.clearedAllData': '저장된 모든 데이터를 삭제하고 기본 보드를 불러왔습니다.',
+      'confirm.clearAllData': '저장된 모든 데이터(보드, 설정, 로컬 오디오 캐시)를 삭제하고 기본값으로 재설정할까요?',
       'board.defaultName': '사운드보드',
       'board.renameTitle': '클릭하여 보드 이름 변경',
       'ui.dragToReorderPrefix': '드래그하여 순서 변경',
@@ -1964,6 +1970,55 @@
     reader.readAsText(file);
   }
 
+  function clearLocalAudioDatabase() {
+    return new Promise((resolve) => {
+      if (!window || !window.indexedDB || typeof window.indexedDB.deleteDatabase !== 'function') {
+        resolve();
+        return;
+      }
+      try {
+        const req = window.indexedDB.deleteDatabase('soundboard-audio');
+        req.onsuccess = function () { resolve(); };
+        req.onerror = function () { resolve(); };
+        req.onblocked = function () { resolve(); };
+      } catch (_) {
+        resolve();
+      }
+    });
+  }
+
+  function clearAllDataAndReset() {
+    if (!window.confirm(t('confirm.clearAllData'))) return;
+    if (Audio && Audio.stopSound) Audio.stopSound();
+    playingId = null;
+    errorIds = new Set();
+    activeMomentaryKeys.clear();
+    hotkeyMap.clear();
+    try {
+      if (Storage && Storage.clearBoard) Storage.clearBoard();
+    } catch (_) {}
+    try {
+      const keysToDelete = [];
+      for (let i = 0; i < localStorage.length; i += 1) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith('soundboard-category-state:') || k.startsWith('soundboard-category-order:') || k === AUTO_LEVEL_KEY)) {
+          keysToDelete.push(k);
+        }
+      }
+      keysToDelete.forEach((k) => localStorage.removeItem(k));
+    } catch (_) {}
+    clearLocalAudioDatabase().finally(function () {
+      if (Audio && Audio.clearCache) Audio.clearCache();
+      loadInitialBoard();
+      if (downloadStatus) {
+        downloadStatus.textContent = t('status.clearedAllData');
+        setTimeout(function () {
+          if (downloadStatus) downloadStatus.textContent = '';
+        }, 2200);
+      }
+    });
+  }
+
   var boardTitleEditInited = false;
   function initBoardTitle() {
     if (!boardNameEl || boardTitleEditInited) return;
@@ -2006,9 +2061,11 @@
 
   function initToolbar() {
     if (!toolbarEl) return;
+    const boardFileGroupEl = toolbarEl.querySelector('.toolbar__group--board-file');
     const addBtn = toolbarEl.querySelector('[data-action="add"]');
     const importBtn = toolbarEl.querySelector('[data-action="import"]');
     const exportBtn = toolbarEl.querySelector('[data-action="export"]');
+    const clearDataBtn = toolbarEl.querySelector('[data-action="clear-data"]');
     const downloadBtn = toolbarEl.querySelector('[data-action="download-sounds"]');
     const webAddBtn = toolbarEl.querySelector('[data-action="web-add"]');
     const settingsBtn = toolbarEl.querySelector('[data-action="settings-open"]');
@@ -2020,31 +2077,27 @@
     if (importBtn && importInput) importBtn.addEventListener('click', () => importInput.click());
     if (importInput) importInput.addEventListener('change', (e) => { if (e.target.files[0]) importBoard(e.target.files[0]); e.target.value = ''; });
     if (importDropzoneEl && importInput) {
-      importDropzoneEl.addEventListener('click', function () {
-        importInput.click();
-      });
-      importDropzoneEl.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          importInput.click();
-        }
-      });
-      ['dragenter', 'dragover'].forEach((evtName) => {
-        importDropzoneEl.addEventListener(evtName, function (e) {
-          e.preventDefault();
-          e.stopPropagation();
-          importDropzoneEl.classList.add('import-dropzone--active');
-        });
-      });
-      ['dragleave', 'dragend', 'drop'].forEach((evtName) => {
-        importDropzoneEl.addEventListener(evtName, function (e) {
-          e.preventDefault();
-          e.stopPropagation();
-          importDropzoneEl.classList.remove('import-dropzone--active');
-        });
-      });
-      importDropzoneEl.addEventListener('drop', function (e) {
+      const dropTargets = [importDropzoneEl];
+      if (boardFileGroupEl) dropTargets.push(boardFileGroupEl);
+
+      function hasFileDrag(e) {
+        const types = e && e.dataTransfer && e.dataTransfer.types ? Array.from(e.dataTransfer.types) : [];
+        return types.includes('Files');
+      }
+
+      function clearDropActiveState() {
+        importDropzoneEl.classList.remove('import-dropzone--active');
+        if (boardFileGroupEl) boardFileGroupEl.classList.remove('toolbar__group--drop-active');
+      }
+
+      function setDropActiveState() {
+        importDropzoneEl.classList.add('import-dropzone--active');
+        if (boardFileGroupEl) boardFileGroupEl.classList.add('toolbar__group--drop-active');
+      }
+
+      function processDroppedFiles(e) {
         const files = e.dataTransfer && e.dataTransfer.files ? Array.from(e.dataTransfer.files) : [];
+        if (!files.length) return;
         const file = files.find((f) => /\.json$/i.test(f.name || '')) || files[0];
         if (!file || !/\.json$/i.test(file.name || '')) {
           if (downloadStatus) {
@@ -2056,9 +2109,59 @@
           return;
         }
         importBoard(file);
+      }
+
+      importDropzoneEl.addEventListener('click', function () {
+        importInput.click();
+      });
+      importDropzoneEl.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          importInput.click();
+        }
+      });
+
+      dropTargets.forEach((target) => {
+        ['dragenter', 'dragover'].forEach((evtName) => {
+          target.addEventListener(evtName, function (e) {
+            if (!hasFileDrag(e)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+            setDropActiveState();
+          });
+        });
+        ['dragleave', 'dragend'].forEach((evtName) => {
+          target.addEventListener(evtName, function (e) {
+            if (!hasFileDrag(e)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            clearDropActiveState();
+          });
+        });
+        target.addEventListener('drop', function (e) {
+          if (!hasFileDrag(e)) return;
+          e.preventDefault();
+          e.stopPropagation();
+          clearDropActiveState();
+          processDroppedFiles(e);
+        });
+      });
+
+      document.addEventListener('dragover', function (e) {
+        if (!hasFileDrag(e)) return;
+        e.preventDefault();
+      });
+      document.addEventListener('drop', function (e) {
+        if (!hasFileDrag(e)) return;
+        if (!boardFileGroupEl || !boardFileGroupEl.contains(e.target)) {
+          e.preventDefault();
+          clearDropActiveState();
+        }
       });
     }
     if (exportBtn) exportBtn.addEventListener('click', exportBoard);
+    if (clearDataBtn) clearDataBtn.addEventListener('click', clearAllDataAndReset);
     if (downloadBtn) downloadBtn.addEventListener('click', downloadAllSounds);
     if (webAddBtn) webAddBtn.addEventListener('click', addFromWebUrl);
     if (settingsBtn) settingsBtn.addEventListener('click', openSettingsScreen);

@@ -8,7 +8,12 @@
 </head>
 <body>
   <header class="header">
-    <h1 id="board-name" class="header__title" title="Click to change board name">Soundboard</h1>
+    <div class="header__toprow">
+      <h1 id="board-name" class="header__title" title="Click to change board name">Soundboard</h1>
+      <button type="button" id="header-toggle" class="btn btn--secondary header__toggle" aria-pressed="false" aria-controls="toolbar global-volume-wrap">
+        Hide Controls
+      </button>
+    </div>
     <p class="header__hint" data-i18n="header.hint">Tip: click the board name to rename it.</p>
     <div id="toolbar" class="toolbar">
       <div class="toolbar__group toolbar__group--create-edit" aria-label="Create and edit tools">

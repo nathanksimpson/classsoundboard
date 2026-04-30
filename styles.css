@@ -68,6 +68,21 @@ body.body--overlay-open {
   cursor: pointer;
 }
 
+.header__toprow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.header__toggle {
+  display: none;
+  min-height: 34px;
+  padding: 6px 10px;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
 .header__title:hover {
   color: var(--primary);
 }
@@ -1011,6 +1026,26 @@ body.body--overlay-open {
 
 /* iPad / touch-first ergonomics */
 @media (max-width: 1100px) {
+  .header__toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .header--collapsed .toolbar,
+  .header--collapsed .header__global-volume,
+  .header--collapsed .header__hint {
+    display: none;
+  }
+
+  .header--collapsed {
+    padding-bottom: var(--space-2);
+  }
+
+  .header--collapsed .header__title {
+    margin-bottom: 0;
+  }
+
   .toolbar {
     position: relative;
     overflow-x: auto;

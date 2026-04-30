@@ -44,6 +44,8 @@
   const settingsClearSearchBtn = document.getElementById('settings-clear-search');
   const languageSelectEl = document.getElementById('language-select');
   const helpScreenEl = document.getElementById('help-screen');
+  const headerEl = document.querySelector('.header');
+  const headerToggleBtn = document.getElementById('header-toggle');
 
   function getBoardJsonPath() {
     const base = window.location.pathname.replace(/\/[^/]*$/, '') || '/';
@@ -54,6 +56,7 @@
   const CATEGORY_ORDER_KEY_PREFIX = 'soundboard-category-order:';
   const AUTO_LEVEL_KEY = 'soundboard-auto-level';
   const LANGUAGE_KEY = 'soundboard-language';
+  const HEADER_COLLAPSED_KEY = 'soundboard-header-collapsed';
   const SETTINGS_BATCH_SIZE = 80;
   const I18N = {
     en: {
@@ -311,6 +314,31 @@
     }
     window.SoundboardI18n = { t };
     applyTranslations();
+  }
+
+  function setHeaderCollapsed(collapsed) {
+    if (!headerEl) return;
+    const isCollapsed = !!collapsed;
+    headerEl.classList.toggle('header--collapsed', isCollapsed);
+    if (headerToggleBtn) {
+      headerToggleBtn.setAttribute('aria-pressed', isCollapsed ? 'true' : 'false');
+      headerToggleBtn.textContent = isCollapsed ? 'Show Controls' : 'Hide Controls';
+      headerToggleBtn.title = isCollapsed ? 'Expand top controls' : 'Collapse top controls';
+    }
+    try { localStorage.setItem(HEADER_COLLAPSED_KEY, isCollapsed ? 'true' : 'false'); } catch (_) {}
+  }
+
+  function initHeaderCollapse() {
+    if (!headerEl || !headerToggleBtn) return;
+    let collapsed = false;
+    try {
+      const raw = localStorage.getItem(HEADER_COLLAPSED_KEY);
+      collapsed = raw === 'true';
+    } catch (_) {}
+    setHeaderCollapsed(collapsed);
+    headerToggleBtn.addEventListener('click', function () {
+      setHeaderCollapsed(!headerEl.classList.contains('header--collapsed'));
+    });
   }
 
   function getCategoryStorageKey() {
@@ -2497,6 +2525,7 @@
 
   function init() {
     initI18n();
+    initHeaderCollapse();
     initToolbar();
     initModal();
     initKeyboard();

@@ -322,8 +322,8 @@
     headerEl.classList.toggle('header--collapsed', isCollapsed);
     if (headerToggleBtn) {
       headerToggleBtn.setAttribute('aria-pressed', isCollapsed ? 'true' : 'false');
-      headerToggleBtn.textContent = isCollapsed ? 'Show Controls' : 'Hide Controls';
-      headerToggleBtn.title = isCollapsed ? 'Expand top controls' : 'Collapse top controls';
+      headerToggleBtn.textContent = isCollapsed ? '▸ More' : '▾ More';
+      headerToggleBtn.title = isCollapsed ? 'Show more top-bar controls' : 'Show fewer top-bar controls';
     }
     try { localStorage.setItem(HEADER_COLLAPSED_KEY, isCollapsed ? 'true' : 'false'); } catch (_) {}
   }

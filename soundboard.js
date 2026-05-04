@@ -46,6 +46,11 @@
   const helpScreenEl = document.getElementById('help-screen');
   const headerEl = document.querySelector('.header');
   const headerToggleBtn = document.getElementById('header-toggle');
+  const quickAccessEl = document.getElementById('quick-access');
+  const favouritesSectionEl = document.getElementById('favourites-section');
+  const favouritesStripEl = document.getElementById('favourites-strip');
+  const recentsSectionEl = document.getElementById('recents-section');
+  const recentsStripEl = document.getElementById('recents-strip');
 
   function getBoardJsonPath() {
     const base = window.location.pathname.replace(/\/[^/]*$/, '') || '/';
@@ -57,6 +62,9 @@
   const AUTO_LEVEL_KEY = 'soundboard-auto-level';
   const LANGUAGE_KEY = 'soundboard-language';
   const HEADER_COLLAPSED_KEY = 'soundboard-header-collapsed';
+  const FAVOURITES_KEY_PREFIX = 'soundboard-favourites:';
+  const RECENTS_KEY_PREFIX = 'soundboard-recents:';
+  const MAX_RECENT_SOUNDS = 20;
   const SETTINGS_BATCH_SIZE = 80;
   const I18N = {
     en: {
@@ -140,7 +148,11 @@
       'ui.dragToReorderPrefix': 'Drag to reorder',
       'ui.playPrefix': 'Play',
       'ui.noSounds': 'No sounds. Add a sound or import a board.',
-      'ui.noSearchMatches': 'No sounds match your search.'
+      'ui.noSearchMatches': 'No sounds match your search.',
+      'quickAccess.favourites': 'Favourites',
+      'quickAccess.recents': 'Recents',
+      'quickAccess.emptyFavourites': 'No favourites yet. Tap the star on a sound tile.',
+      'quickAccess.emptyRecents': 'No recent plays yet. Play a sound to populate this list.'
     },
     ko: {
       'header.hint': '팁: 보드 이름을 클릭하면 이름을 변경할 수 있습니다.',
@@ -223,7 +235,11 @@
       'ui.dragToReorderPrefix': '드래그하여 순서 변경',
       'ui.playPrefix': '재생',
       'ui.noSounds': '사운드가 없습니다. 사운드를 추가하거나 보드를 가져오세요.',
-      'ui.noSearchMatches': '검색 결과가 없습니다.'
+      'ui.noSearchMatches': '검색 결과가 없습니다.',
+      'quickAccess.favourites': '즐겨찾기',
+      'quickAccess.recents': '최근 재생',
+      'quickAccess.emptyFavourites': '아직 즐겨찾기가 없습니다. 사운드 타일의 별을 눌러 추가하세요.',
+      'quickAccess.emptyRecents': '최근 재생 목록이 비어 있습니다. 사운드를 재생하면 여기에 표시됩니다.'
     }
   };
   let currentLanguage = 'en';
@@ -231,6 +247,8 @@
   let showHotkeyOnly = false;
   let categoryUiState = {};
   let categoryOrder = [];
+  let favouriteIds = new Set();
+  let recentIds = [];
   let settingsDirty = false;
   let settingsRenderIndex = 0;
   let settingsPreviouslyFocused = null;
@@ -384,6 +402,60 @@
     try {
       localStorage.setItem(getCategoryOrderStorageKey(), JSON.stringify(categoryOrder || []));
     } catch (_) {}
+  }
+
+  function getFavouritesStorageKey() {
+    const boardId = currentBoard && currentBoard.id ? String(currentBoard.id) : 'default';
+    return FAVOURITES_KEY_PREFIX + boardId;
+  }
+
+  function getRecentsStorageKey() {
+    const boardId = currentBoard && currentBoard.id ? String(currentBoard.id) : 'default';
+    return RECENTS_KEY_PREFIX + boardId;
+  }
+
+  function loadFavourites() {
+    try {
+      const raw = localStorage.getItem(getFavouritesStorageKey());
+      if (!raw) return new Set();
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return new Set();
+      return new Set(parsed.map((id) => String(id)));
+    } catch (_) {
+      return new Set();
+    }
+  }
+
+  function saveFavourites() {
+    try {
+      localStorage.setItem(getFavouritesStorageKey(), JSON.stringify(Array.from(favouriteIds)));
+    } catch (_) {}
+  }
+
+  function loadRecents() {
+    try {
+      const raw = localStorage.getItem(getRecentsStorageKey());
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.map((id) => String(id));
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function saveRecents() {
+    try {
+      localStorage.setItem(getRecentsStorageKey(), JSON.stringify(recentIds));
+    } catch (_) {}
+  }
+
+  function pruneQuickAccessState() {
+    const ids = new Set((currentBoard && Array.isArray(currentBoard.sounds) ? currentBoard.sounds : []).map((s) => String(s.id)));
+    favouriteIds = new Set(Array.from(favouriteIds).filter((id) => ids.has(id)));
+    recentIds = recentIds.filter((id) => ids.has(id)).slice(0, MAX_RECENT_SOUNDS);
+    saveFavourites();
+    saveRecents();
   }
 
   function normalizeCategoryKey(category) {
@@ -639,7 +711,10 @@
     row.innerHTML = ''
       + '<div class="settings-row__top">'
       + '  <div class="settings-row__name">' + escapeAttr((idx + 1) + '. ' + (sound.title || 'Untitled')) + '</div>'
-      + '  <label class="settings-row__delete"><input type="checkbox" data-field="delete"> Delete</label>'
+      + '  <div class="settings-row__flags">'
+      + '    <label class="settings-row__favorite"><input type="checkbox" data-field="favorite"' + (favouriteIds.has(String(sound.id)) ? ' checked' : '') + '> Favourite</label>'
+      + '    <label class="settings-row__delete"><input type="checkbox" data-field="delete"> Delete</label>'
+      + '  </div>'
       + '</div>'
       + '<div class="settings-row__grid">'
       + '  <label><span class="field__label">Title</span><input class="field__input" data-field="title" type="text" value="' + escapeAttr(sound.title || '') + '"></label>'
@@ -694,6 +769,100 @@
       if (showHotkeyOnly && !soundHasAssignedHotkey(s)) return false;
       return soundMatchesQuery(s, q);
     });
+  }
+
+  function getQuickAccessSounds(filteredSounds) {
+    const source = currentBoard && Array.isArray(currentBoard.sounds) ? currentBoard.sounds : [];
+    const byId = new Map(source.map((s) => [String(s.id), s]));
+    const visibleIds = new Set((Array.isArray(filteredSounds) ? filteredSounds : []).map((s) => String(s.id)));
+    const favourites = Array.from(favouriteIds)
+      .map((id) => byId.get(id))
+      .filter((s) => !!s && visibleIds.has(String(s.id)));
+    const recents = (recentIds || [])
+      .map((id) => byId.get(id))
+      .filter((s) => !!s && visibleIds.has(String(s.id)));
+    return { favourites, recents };
+  }
+
+  function toggleFavourite(sound) {
+    if (!sound || !sound.id) return;
+    const id = String(sound.id);
+    if (favouriteIds.has(id)) favouriteIds.delete(id);
+    else favouriteIds.add(id);
+    saveFavourites();
+    render();
+  }
+
+  function recordRecentPlay(soundId) {
+    const id = String(soundId || '').trim();
+    if (!id) return;
+    recentIds = [id].concat((recentIds || []).filter((x) => x !== id)).slice(0, MAX_RECENT_SOUNDS);
+    saveRecents();
+  }
+
+  function renderQuickAccess(filteredSounds, hotkeyCounts) {
+    if (!quickAccessEl || !UI || !UI.renderHorizontalStrip) return;
+    const labels = {
+      favourites: t('quickAccess.favourites') || 'Favourites',
+      recents: t('quickAccess.recents') || 'Recents',
+      emptyFavourites: t('quickAccess.emptyFavourites') || 'No favourites yet. Tap the star on a sound tile.',
+      emptyRecents: t('quickAccess.emptyRecents') || 'No recent plays yet. Play a sound to populate this list.'
+    };
+    const favouriteTitle = favouritesSectionEl && favouritesSectionEl.querySelector('.quick-access__title');
+    const recentTitle = recentsSectionEl && recentsSectionEl.querySelector('.quick-access__title');
+    if (favouriteTitle) favouriteTitle.textContent = labels.favourites;
+    if (recentTitle) recentTitle.textContent = labels.recents;
+
+    const strips = getQuickAccessSounds(filteredSounds);
+    const hasFavourites = strips.favourites.length > 0;
+    const hasRecents = strips.recents.length > 0;
+    if (favouritesSectionEl) favouritesSectionEl.hidden = false;
+    if (recentsSectionEl) recentsSectionEl.hidden = false;
+    quickAccessEl.hidden = false;
+
+    if (hasFavourites && favouritesStripEl) {
+      UI.renderHorizontalStrip(
+        favouritesStripEl,
+        strips.favourites,
+        playingId,
+        errorIds,
+        onPlay,
+        onEditSound,
+        {
+          hotkeyCounts,
+          isFavorite: (s) => favouriteIds.has(String(s.id)),
+          onToggleFavorite: toggleFavourite
+        }
+      );
+    } else if (favouritesStripEl) {
+      favouritesStripEl.textContent = '';
+      const empty = document.createElement('p');
+      empty.className = 'sound-strip__empty';
+      empty.textContent = labels.emptyFavourites;
+      favouritesStripEl.appendChild(empty);
+    }
+
+    if (hasRecents && recentsStripEl) {
+      UI.renderHorizontalStrip(
+        recentsStripEl,
+        strips.recents,
+        playingId,
+        errorIds,
+        onPlay,
+        onEditSound,
+        {
+          hotkeyCounts,
+          isFavorite: (s) => favouriteIds.has(String(s.id)),
+          onToggleFavorite: toggleFavourite
+        }
+      );
+    } else if (recentsStripEl) {
+      recentsStripEl.textContent = '';
+      const empty = document.createElement('p');
+      empty.className = 'sound-strip__empty';
+      empty.textContent = labels.emptyRecents;
+      recentsStripEl.appendChild(empty);
+    }
   }
 
   function buildGroups(sounds) {
@@ -821,6 +990,9 @@
     }
     categoryUiState = loadCategoryUiState();
     categoryOrder = loadCategoryOrder();
+    favouriteIds = loadFavourites();
+    recentIds = loadRecents();
+    pruneQuickAccessState();
     buildHotkeyMap();
     refreshCategorySuggestions();
     render();
@@ -869,10 +1041,16 @@
     const allSounds = currentBoard ? currentBoard.sounds : [];
     const filtered = getFilteredSounds();
     const hotkeyCounts = getHotkeyCounts(allSounds);
+    const sharedRenderOptions = {
+      hotkeyCounts,
+      isFavorite: (s) => favouriteIds.has(String(s && s.id)),
+      onToggleFavorite: toggleFavourite
+    };
     updateSearchCount(filtered.length, Array.isArray(allSounds) ? allSounds.length : 0);
+    renderQuickAccess(filtered, hotkeyCounts);
 
     if (!Array.isArray(allSounds) || allSounds.length === 0) {
-      UI.renderGrid(gridEl, [], playingId, errorIds, onPlay, onEditSound, reorderMode, reorderSounds, { hotkeyCounts });
+      UI.renderGrid(gridEl, [], playingId, errorIds, onPlay, onEditSound, reorderMode, reorderSounds, sharedRenderOptions);
       updateHotkeyOnlyButton();
       updateReorderButton();
       return;
@@ -889,7 +1067,7 @@
         onEditSound,
         reorderMode,
         null,
-        { hotkeyCounts },
+        sharedRenderOptions,
         {
           isCollapsed: (key) => categoryUiState && categoryUiState[String(key)] === false,
           onToggleCategory: (key) => {
@@ -904,7 +1082,7 @@
         }
       );
     } else {
-      UI.renderGrid(gridEl, filtered, playingId, errorIds, onPlay, onEditSound, reorderMode, reorderSounds, { hotkeyCounts });
+      UI.renderGrid(gridEl, filtered, playingId, errorIds, onPlay, onEditSound, reorderMode, reorderSounds, sharedRenderOptions);
     }
     updateHotkeyOnlyButton();
     updateReorderButton();
@@ -997,6 +1175,7 @@
     if (!sound || !Audio) return;
     const squelch = options.squelch !== false;
     ensureAutoAnalysis(sound);
+    recordRecentPlay(sound.id);
     if (squelch) {
       if (Audio.stopSound) Audio.stopSound();
       playingId = null;
@@ -1081,6 +1260,10 @@
     if (!currentBoard || !sound) return;
     currentBoard.sounds = currentBoard.sounds.filter((s) => s.id !== sound.id);
     errorIds.delete(sound.id);
+    favouriteIds.delete(String(sound.id));
+    recentIds = (recentIds || []).filter((id) => id !== String(sound.id));
+    saveFavourites();
+    saveRecents();
     saveToStorage();
     closeModal();
     render();
@@ -1534,6 +1717,7 @@
     const firstInvalid = { row: null, field: null };
     const hotkeyOwners = new Map();
     const pendingById = new Map();
+    const nextFavouriteIds = new Set();
 
     function trackInvalid(row, field, message) {
       setSettingsRowError(row, field, message);
@@ -1550,6 +1734,7 @@
 
       const shouldDelete = !!(row.querySelector('[data-field="delete"]') && row.querySelector('[data-field="delete"]').checked);
       if (shouldDelete) continue;
+      const shouldFavorite = !!(row.querySelector('[data-field="favorite"]') && row.querySelector('[data-field="favorite"]').checked);
 
       const title = ((row.querySelector('[data-field="title"]') || {}).value || '').trim();
       const fileUrl = ((row.querySelector('[data-field="fileUrl"]') || {}).value || '').trim();
@@ -1605,6 +1790,7 @@
         momentary: !!(row.querySelector('[data-field="momentary"]') && row.querySelector('[data-field="momentary"]').checked)
       });
       nextSounds.push(existing);
+      if (shouldFavorite) nextFavouriteIds.add(existing.id);
     }
 
     hotkeyOwners.forEach((owners, key) => {
@@ -1639,6 +1825,8 @@
     });
 
     currentBoard.sounds = nextSounds;
+    favouriteIds = nextFavouriteIds;
+    saveFavourites();
     buildHotkeyMap();
     saveToStorage();
     refreshCategorySuggestions();
@@ -2030,6 +2218,8 @@
     if (Audio && Audio.stopSound) Audio.stopSound();
     playingId = null;
     errorIds = new Set();
+    favouriteIds = new Set();
+    recentIds = [];
     activeMomentaryKeys.clear();
     hotkeyMap.clear();
     try {
@@ -2043,6 +2233,8 @@
         if (k && (
           k.startsWith('soundboard-category-state:')
           || k.startsWith('soundboard-category-order:')
+          || k.startsWith(FAVOURITES_KEY_PREFIX)
+          || k.startsWith(RECENTS_KEY_PREFIX)
           || k === AUTO_LEVEL_KEY
           || k === LANGUAGE_KEY
         )) {

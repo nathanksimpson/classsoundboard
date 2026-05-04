@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Soundboard</title>
-  <link rel="stylesheet" href="styles.css?v=20260430-3">
+  <link rel="stylesheet" href="styles.css?v=20260504-3">
 </head>
 <body>
   <header class="header">
@@ -77,6 +77,20 @@
   </header>
 
   <main class="main">
+    <section id="quick-access" class="quick-access" aria-label="Quick access sounds">
+      <div id="favourites-section" class="quick-access__section" hidden>
+        <div class="quick-access__header">
+          <h2 class="quick-access__title">Favourites</h2>
+        </div>
+        <div id="favourites-strip" class="sound-strip" role="list"></div>
+      </div>
+      <div id="recents-section" class="quick-access__section" hidden>
+        <div class="quick-access__header">
+          <h2 class="quick-access__title">Recents</h2>
+        </div>
+        <div id="recents-strip" class="sound-strip" role="list"></div>
+      </div>
+    </section>
     <div id="sound-grid" class="grid" role="list"></div>
   </main>
 
@@ -239,11 +253,11 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" crossorigin="anonymous"></script>
   <datalist id="category-options"></datalist>
-  <script src="storage.js?v=20260430-3"></script>
-  <script src="local-audio.js?v=20260430-3"></script>
-  <script src="audio-engine.js?v=20260430-3"></script>
-  <script src="board-manager.js?v=20260430-3"></script>
-  <script src="ui-renderer.js?v=20260430-3"></script>
-  <script src="soundboard.js?v=20260430-3"></script>
+  <script src="storage.js?v=20260504-3"></script>
+  <script src="local-audio.js?v=20260504-3"></script>
+  <script src="audio-engine.js?v=20260504-3"></script>
+  <script src="board-manager.js?v=20260504-3"></script>
+  <script src="ui-renderer.js?v=20260504-3"></script>
+  <script src="soundboard.js?v=20260504-3"></script>
 </body>
 </html>

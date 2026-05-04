@@ -55,6 +55,8 @@ function renderTile(sound, state, index, reorderMode, renderOptions = {}) {
   const normalizedHotkey = String(sound && sound.hotkey ? sound.hotkey : '').trim();
   const hotkeyCounts = renderOptions.hotkeyCounts instanceof Map ? renderOptions.hotkeyCounts : new Map();
   const isHotkeyConflict = normalizedHotkey && (hotkeyCounts.get(normalizedHotkey) || 0) > 1;
+  const isFavorite = typeof renderOptions.isFavorite === 'function' ? !!renderOptions.isFavorite(sound) : false;
+  const showFavoriteToggle = !reorderMode && typeof renderOptions.onToggleFavorite === 'function';
   if (!reorderMode && (normalizedHotkey || sound.momentary)) {
     const meta = document.createElement('div');
     meta.className = 'tile__meta';
@@ -85,6 +87,17 @@ function renderTile(sound, state, index, reorderMode, renderOptions = {}) {
     editBtn.title = 'Edit';
     editBtn.textContent = '\u270E';
     el.appendChild(editBtn);
+  }
+
+  if (showFavoriteToggle) {
+    const favBtn = document.createElement('button');
+    favBtn.type = 'button';
+    favBtn.className = 'tile__favorite';
+    favBtn.setAttribute('aria-label', (isFavorite ? 'Remove from favourites: ' : 'Add to favourites: ') + title);
+    favBtn.setAttribute('aria-pressed', isFavorite ? 'true' : 'false');
+    favBtn.title = isFavorite ? 'Remove from favourites' : 'Add to favourites';
+    favBtn.textContent = '\u2605';
+    el.appendChild(favBtn);
   }
 
   if (state === 'playing') {
@@ -118,6 +131,7 @@ function renderGrid(container, sounds, playState, errorIds, onPlay, onEdit, reor
   }
 
   const reorder = !!reorderMode && typeof onReorder === 'function';
+  const onToggleFavorite = typeof renderOptions.onToggleFavorite === 'function' ? renderOptions.onToggleFavorite : null;
 
   sounds.forEach((s, i) => {
     const state = playState === s.id ? 'playing' : (errorIds && errorIds.has(s.id)) ? 'error' : 'idle';
@@ -134,12 +148,12 @@ function renderGrid(container, sounds, playState, errorIds, onPlay, onEdit, reor
     if (!reorder && isMomentary && onPlay) {
       tile.addEventListener('pointerdown', (e) => {
         if (e.button !== 0) return;
-        if (e.target && e.target.closest && e.target.closest('.tile__edit')) return;
+        if (e.target && e.target.closest && e.target.closest('.tile__edit, .tile__favorite')) return;
         e.preventDefault();
         onPlay(s, 'momentary-start');
       });
       const stopMomentary = (e) => {
-        if (e && e.target && e.target.closest && e.target.closest('.tile__edit')) return;
+        if (e && e.target && e.target.closest && e.target.closest('.tile__edit, .tile__favorite')) return;
         onPlay(s, 'momentary-stop');
       };
       tile.addEventListener('pointerup', stopMomentary);
@@ -164,6 +178,16 @@ function renderGrid(container, sounds, playState, errorIds, onPlay, onEdit, reor
         e.preventDefault();
         onEdit(s);
       });
+    }
+    if (onToggleFavorite) {
+      const favBtn = tile.querySelector('.tile__favorite');
+      if (favBtn) {
+        favBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onToggleFavorite(s);
+        });
+      }
     }
     if (reorder) {
       tile.addEventListener('dragstart', (e) => {
@@ -194,6 +218,71 @@ function renderGrid(container, sounds, playState, errorIds, onPlay, onEdit, reor
         onReorder(fromIndex, toIndex);
       });
     }
+    container.appendChild(tile);
+  });
+}
+
+function renderHorizontalStrip(container, sounds, playState, errorIds, onPlay, onEdit, renderOptions = {}) {
+  if (!container) return;
+  container.classList.add('sound-strip');
+  container.textContent = '';
+  const list = Array.isArray(sounds) ? sounds : [];
+  if (list.length === 0) return;
+
+  const onToggleFavorite = typeof renderOptions.onToggleFavorite === 'function' ? renderOptions.onToggleFavorite : null;
+  list.forEach((s, i) => {
+    const state = playState === s.id ? 'playing' : (errorIds && errorIds.has(s.id)) ? 'error' : 'idle';
+    const tile = renderTile(s, state, i, false, renderOptions);
+    const isMomentary = !!(s && s.momentary);
+
+    tile.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (isMomentary) return;
+      if (onPlay) onPlay(s);
+    });
+
+    if (isMomentary && onPlay) {
+      tile.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        if (e.target && e.target.closest && e.target.closest('.tile__edit, .tile__favorite')) return;
+        e.preventDefault();
+        onPlay(s, 'momentary-start');
+      });
+      const stopMomentary = (e) => {
+        if (e && e.target && e.target.closest && e.target.closest('.tile__edit, .tile__favorite')) return;
+        onPlay(s, 'momentary-stop');
+      };
+      tile.addEventListener('pointerup', stopMomentary);
+      tile.addEventListener('pointercancel', stopMomentary);
+      tile.addEventListener('lostpointercapture', stopMomentary);
+      tile.addEventListener('pointerleave', (e) => {
+        if (e.buttons === 0) return;
+        stopMomentary(e);
+      });
+    }
+
+    if (onEdit) {
+      const editBtn = tile.querySelector('.tile__edit');
+      if (editBtn) {
+        editBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onEdit(s);
+        });
+      }
+    }
+
+    if (onToggleFavorite) {
+      const favBtn = tile.querySelector('.tile__favorite');
+      if (favBtn) {
+        favBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onToggleFavorite(s);
+        });
+      }
+    }
+
     container.appendChild(tile);
   });
 }
@@ -387,6 +476,7 @@ function renderGroupedGrid(container, groups, playState, errorIds, onPlay, onEdi
 window.SoundboardUIRenderer = {
   renderGrid,
   renderGroupedGrid,
+  renderHorizontalStrip,
   updateTileState,
   escapeText
 };

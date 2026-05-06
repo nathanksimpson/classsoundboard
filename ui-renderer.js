@@ -230,6 +230,13 @@ function renderHorizontalStrip(container, sounds, playState, errorIds, onPlay, o
   if (list.length === 0) return;
 
   const reorderMode = !!renderOptions.reorderMode && typeof renderOptions.onReorder === 'function';
+  let selectedReorderIndex = -1;
+
+  function clearReorderSelection() {
+    selectedReorderIndex = -1;
+    container.querySelectorAll('.tile--reorder-selected').forEach((n) => n.classList.remove('tile--reorder-selected'));
+  }
+
   const onToggleFavorite = typeof renderOptions.onToggleFavorite === 'function' ? renderOptions.onToggleFavorite : null;
   list.forEach((s, i) => {
     const state = playState === s.id ? 'playing' : (errorIds && errorIds.has(s.id)) ? 'error' : 'idle';
@@ -238,7 +245,23 @@ function renderHorizontalStrip(container, sounds, playState, errorIds, onPlay, o
 
     tile.addEventListener('click', (e) => {
       e.preventDefault();
-      if (reorderMode) return;
+      if (reorderMode) {
+        const toIndex = parseInt(tile.dataset.index, 10);
+        if (toIndex < 0 || isNaN(toIndex)) return;
+        if (selectedReorderIndex < 0) {
+          clearReorderSelection();
+          selectedReorderIndex = toIndex;
+          tile.classList.add('tile--reorder-selected');
+          return;
+        }
+        if (selectedReorderIndex === toIndex) {
+          clearReorderSelection();
+          return;
+        }
+        renderOptions.onReorder(selectedReorderIndex, toIndex);
+        clearReorderSelection();
+        return;
+      }
       if (isMomentary) return;
       if (onPlay) onPlay(s);
     });
@@ -312,6 +335,7 @@ function renderHorizontalStrip(container, sounds, playState, errorIds, onPlay, o
         const fromIndex = list.findIndex((x) => String(x.id) === String(soundId));
         const toIndex = parseInt(tile.dataset.index, 10);
         if (fromIndex === -1 || toIndex < 0 || fromIndex === toIndex) return;
+        clearReorderSelection();
         renderOptions.onReorder(fromIndex, toIndex);
       });
     }

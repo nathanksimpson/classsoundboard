@@ -432,6 +432,7 @@ body.body--overlay-open {
 
 .sound-strip--favorites {
   --favorites-strip-rows: 1;
+  min-height: calc((var(--favorites-strip-rows) * 104px) + ((var(--favorites-strip-rows) - 1) * 10px));
 }
 
 .sound-strip--favorites.sound-strip--multirow {
@@ -1007,6 +1008,11 @@ body.body--overlay-open {
 
 .tile--dragging {
   opacity: 0.6;
+}
+
+.tile--reorder-selected {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 /* Modal */

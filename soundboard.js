@@ -2503,7 +2503,7 @@
     if (analyzeAllBtn) analyzeAllBtn.addEventListener('click', analyzeAllSounds);
     if (helpBtn) helpBtn.addEventListener('click', openHelpScreen);
     if (favouritesReorderToggleEl) {
-      favouritesReorderToggleEl.addEventListener('click', function () {
+      bindTapAndClick(favouritesReorderToggleEl, function () {
         setFavouriteReorderMode(!favouriteReorderMode);
       });
     }

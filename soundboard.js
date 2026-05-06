@@ -51,6 +51,8 @@
   const favouritesStripEl = document.getElementById('favourites-strip');
   const recentsSectionEl = document.getElementById('recents-section');
   const recentsStripEl = document.getElementById('recents-strip');
+  const favouritesReorderToggleEl = document.getElementById('favourites-reorder-toggle');
+  const favouritesRowsSelectEl = document.getElementById('favourites-rows-select');
 
   function getBoardJsonPath() {
     const base = window.location.pathname.replace(/\/[^/]*$/, '') || '/';
@@ -64,6 +66,9 @@
   const HEADER_COLLAPSED_KEY = 'soundboard-header-collapsed';
   const FAVOURITES_KEY_PREFIX = 'soundboard-favourites:';
   const RECENTS_KEY_PREFIX = 'soundboard-recents:';
+  const FAVOURITES_ROWS_KEY = 'soundboard-favourites-rows';
+  const FAVOURITES_ROWS_MIN = 1;
+  const FAVOURITES_ROWS_MAX = 4;
   const MAX_RECENT_SOUNDS = 20;
   const SETTINGS_BATCH_SIZE = 80;
   const I18N = {
@@ -152,7 +157,10 @@
       'quickAccess.favourites': 'Favourites',
       'quickAccess.recents': 'Recents',
       'quickAccess.emptyFavourites': 'No favourites yet. Tap the star on a sound tile.',
-      'quickAccess.emptyRecents': 'No recent plays yet. Play a sound to populate this list.'
+      'quickAccess.emptyRecents': 'No recent plays yet. Play a sound to populate this list.',
+      'quickAccess.rowsLabel': 'Rows',
+      'quickAccess.reorderFavourites': 'Reorder',
+      'quickAccess.doneReorderingFavourites': 'Done'
     },
     ko: {
       'header.hint': '팁: 보드 이름을 클릭하면 이름을 변경할 수 있습니다.',
@@ -239,7 +247,10 @@
       'quickAccess.favourites': '즐겨찾기',
       'quickAccess.recents': '최근 재생',
       'quickAccess.emptyFavourites': '아직 즐겨찾기가 없습니다. 사운드 타일의 별을 눌러 추가하세요.',
-      'quickAccess.emptyRecents': '최근 재생 목록이 비어 있습니다. 사운드를 재생하면 여기에 표시됩니다.'
+      'quickAccess.emptyRecents': '최근 재생 목록이 비어 있습니다. 사운드를 재생하면 여기에 표시됩니다.',
+      'quickAccess.rowsLabel': '행',
+      'quickAccess.reorderFavourites': '순서 변경',
+      'quickAccess.doneReorderingFavourites': '완료'
     }
   };
   let currentLanguage = 'en';
@@ -249,6 +260,8 @@
   let categoryOrder = [];
   let favouriteIds = new Set();
   let recentIds = [];
+  let favouriteStripRows = 1;
+  let favouriteReorderMode = false;
   let settingsDirty = false;
   let settingsRenderIndex = 0;
   let settingsPreviouslyFocused = null;
@@ -447,6 +460,27 @@
   function saveRecents() {
     try {
       localStorage.setItem(getRecentsStorageKey(), JSON.stringify(recentIds));
+    } catch (_) {}
+  }
+
+  function clampFavouriteRows(value) {
+    const parsed = parseInt(value, 10);
+    if (isNaN(parsed)) return FAVOURITES_ROWS_MIN;
+    return Math.max(FAVOURITES_ROWS_MIN, Math.min(FAVOURITES_ROWS_MAX, parsed));
+  }
+
+  function loadFavouriteRows() {
+    try {
+      const raw = localStorage.getItem(FAVOURITES_ROWS_KEY);
+      return clampFavouriteRows(raw == null ? FAVOURITES_ROWS_MIN : raw);
+    } catch (_) {
+      return FAVOURITES_ROWS_MIN;
+    }
+  }
+
+  function saveFavouriteRows() {
+    try {
+      localStorage.setItem(FAVOURITES_ROWS_KEY, String(clampFavouriteRows(favouriteStripRows)));
     } catch (_) {}
   }
 
@@ -793,6 +827,38 @@
     render();
   }
 
+  function reorderFavourites(fromIndex, toIndex) {
+    const ordered = Array.from(favouriteIds);
+    if (fromIndex < 0 || toIndex < 0 || fromIndex >= ordered.length || toIndex >= ordered.length || fromIndex === toIndex) return;
+    const moved = ordered.splice(fromIndex, 1)[0];
+    ordered.splice(toIndex, 0, moved);
+    favouriteIds = new Set(ordered);
+    saveFavourites();
+    render();
+  }
+
+  function setFavouriteStripRows(nextRows) {
+    const clamped = clampFavouriteRows(nextRows);
+    if (clamped === favouriteStripRows) return;
+    favouriteStripRows = clamped;
+    saveFavouriteRows();
+    render();
+  }
+
+  function updateFavouritesControls(labels) {
+    if (favouritesRowsSelectEl) {
+      const normalized = String(clampFavouriteRows(favouriteStripRows));
+      if (favouritesRowsSelectEl.value !== normalized) favouritesRowsSelectEl.value = normalized;
+    }
+    if (favouritesReorderToggleEl) {
+      favouritesReorderToggleEl.classList.toggle('btn--active', favouriteReorderMode);
+      favouritesReorderToggleEl.setAttribute('aria-pressed', favouriteReorderMode ? 'true' : 'false');
+      favouritesReorderToggleEl.textContent = favouriteReorderMode
+        ? labels.doneReorderingFavourites
+        : labels.reorderFavourites;
+    }
+  }
+
   function recordRecentPlay(soundId) {
     const id = String(soundId || '').trim();
     if (!id) return;
@@ -806,7 +872,9 @@
       favourites: t('quickAccess.favourites') || 'Favourites',
       recents: t('quickAccess.recents') || 'Recents',
       emptyFavourites: t('quickAccess.emptyFavourites') || 'No favourites yet. Tap the star on a sound tile.',
-      emptyRecents: t('quickAccess.emptyRecents') || 'No recent plays yet. Play a sound to populate this list.'
+      emptyRecents: t('quickAccess.emptyRecents') || 'No recent plays yet. Play a sound to populate this list.',
+      reorderFavourites: t('quickAccess.reorderFavourites') || 'Reorder',
+      doneReorderingFavourites: t('quickAccess.doneReorderingFavourites') || 'Done'
     };
     const favouriteTitle = favouritesSectionEl && favouritesSectionEl.querySelector('.quick-access__title');
     const recentTitle = recentsSectionEl && recentsSectionEl.querySelector('.quick-access__title');
@@ -819,6 +887,12 @@
     if (favouritesSectionEl) favouritesSectionEl.hidden = false;
     if (recentsSectionEl) recentsSectionEl.hidden = false;
     quickAccessEl.hidden = false;
+    updateFavouritesControls(labels);
+    const stripRows = clampFavouriteRows(favouriteStripRows);
+    if (favouritesStripEl) {
+      favouritesStripEl.classList.toggle('sound-strip--multirow', stripRows > 1);
+      favouritesStripEl.style.setProperty('--favorites-strip-rows', String(stripRows));
+    }
 
     if (hasFavourites && favouritesStripEl) {
       UI.renderHorizontalStrip(
@@ -831,7 +905,9 @@
         {
           hotkeyCounts,
           isFavorite: (s) => favouriteIds.has(String(s.id)),
-          onToggleFavorite: toggleFavourite
+          onToggleFavorite: toggleFavourite,
+          reorderMode: favouriteReorderMode,
+          onReorder: reorderFavourites
         }
       );
     } else if (favouritesStripEl) {
@@ -992,6 +1068,8 @@
     categoryOrder = loadCategoryOrder();
     favouriteIds = loadFavourites();
     recentIds = loadRecents();
+    favouriteReorderMode = false;
+    reorderMode = false;
     pruneQuickAccessState();
     buildHotkeyMap();
     refreshCategorySuggestions();
@@ -1137,6 +1215,13 @@
 
   function setReorderMode(active) {
     reorderMode = !!active;
+    if (reorderMode) favouriteReorderMode = false;
+    render();
+  }
+
+  function setFavouriteReorderMode(active) {
+    favouriteReorderMode = !!active;
+    if (favouriteReorderMode) reorderMode = false;
     render();
   }
 
@@ -2417,6 +2502,17 @@
     if (hotkeyOnlyBtn) bindTapAndClick(hotkeyOnlyBtn, toggleHotkeyOnlyFilter);
     if (analyzeAllBtn) analyzeAllBtn.addEventListener('click', analyzeAllSounds);
     if (helpBtn) helpBtn.addEventListener('click', openHelpScreen);
+    if (favouritesReorderToggleEl) {
+      favouritesReorderToggleEl.addEventListener('click', function () {
+        setFavouriteReorderMode(!favouriteReorderMode);
+      });
+    }
+    if (favouritesRowsSelectEl) {
+      favouritesRowsSelectEl.value = String(clampFavouriteRows(favouriteStripRows));
+      favouritesRowsSelectEl.addEventListener('change', function () {
+        setFavouriteStripRows(favouritesRowsSelectEl.value);
+      });
+    }
     if (globalVolumeEl && Audio) {
       globalVolumeEl.addEventListener('input', function () {
         const pct = parseInt(globalVolumeEl.value, 10);
@@ -2718,6 +2814,7 @@
   function init() {
     initI18n();
     initHeaderCollapse();
+    favouriteStripRows = loadFavouriteRows();
     initToolbar();
     initModal();
     initKeyboard();

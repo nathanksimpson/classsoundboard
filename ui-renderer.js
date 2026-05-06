@@ -229,19 +229,21 @@ function renderHorizontalStrip(container, sounds, playState, errorIds, onPlay, o
   const list = Array.isArray(sounds) ? sounds : [];
   if (list.length === 0) return;
 
+  const reorderMode = !!renderOptions.reorderMode && typeof renderOptions.onReorder === 'function';
   const onToggleFavorite = typeof renderOptions.onToggleFavorite === 'function' ? renderOptions.onToggleFavorite : null;
   list.forEach((s, i) => {
     const state = playState === s.id ? 'playing' : (errorIds && errorIds.has(s.id)) ? 'error' : 'idle';
-    const tile = renderTile(s, state, i, false, renderOptions);
+    const tile = renderTile(s, state, i, reorderMode, renderOptions);
     const isMomentary = !!(s && s.momentary);
 
     tile.addEventListener('click', (e) => {
       e.preventDefault();
+      if (reorderMode) return;
       if (isMomentary) return;
       if (onPlay) onPlay(s);
     });
 
-    if (isMomentary && onPlay) {
+    if (!reorderMode && isMomentary && onPlay) {
       tile.addEventListener('pointerdown', (e) => {
         if (e.button !== 0) return;
         if (e.target && e.target.closest && e.target.closest('.tile__edit, .tile__favorite')) return;
@@ -261,7 +263,7 @@ function renderHorizontalStrip(container, sounds, playState, errorIds, onPlay, o
       });
     }
 
-    if (onEdit) {
+    if (!reorderMode && onEdit) {
       const editBtn = tile.querySelector('.tile__edit');
       if (editBtn) {
         editBtn.addEventListener('click', (e) => {
@@ -272,7 +274,7 @@ function renderHorizontalStrip(container, sounds, playState, errorIds, onPlay, o
       }
     }
 
-    if (onToggleFavorite) {
+    if (!reorderMode && onToggleFavorite) {
       const favBtn = tile.querySelector('.tile__favorite');
       if (favBtn) {
         favBtn.addEventListener('click', (e) => {
@@ -281,6 +283,37 @@ function renderHorizontalStrip(container, sounds, playState, errorIds, onPlay, o
           onToggleFavorite(s);
         });
       }
+    }
+
+    if (reorderMode) {
+      tile.addEventListener('dragstart', (e) => {
+        if (!e.dataTransfer) return;
+        e.dataTransfer.setData('text/plain', String(s.id));
+        e.dataTransfer.effectAllowed = 'move';
+        tile.classList.add('tile--dragging');
+      });
+      tile.addEventListener('dragend', () => {
+        tile.classList.remove('tile--dragging');
+        container.querySelectorAll('.tile--drag-over').forEach((n) => n.classList.remove('tile--drag-over'));
+      });
+      tile.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+        tile.classList.add('tile--drag-over');
+      });
+      tile.addEventListener('dragleave', () => {
+        tile.classList.remove('tile--drag-over');
+      });
+      tile.addEventListener('drop', (e) => {
+        e.preventDefault();
+        tile.classList.remove('tile--drag-over');
+        if (!e.dataTransfer) return;
+        const soundId = e.dataTransfer.getData('text/plain');
+        const fromIndex = list.findIndex((x) => String(x.id) === String(soundId));
+        const toIndex = parseInt(tile.dataset.index, 10);
+        if (fromIndex === -1 || toIndex < 0 || fromIndex === toIndex) return;
+        renderOptions.onReorder(fromIndex, toIndex);
+      });
     }
 
     container.appendChild(tile);

@@ -78,17 +78,29 @@
 
   <main class="main">
     <section id="quick-access" class="quick-access" aria-label="Quick access sounds">
-      <div id="favourites-section" class="quick-access__section" hidden>
-        <div class="quick-access__header">
-          <h2 class="quick-access__title">Favourites</h2>
-        </div>
-        <div id="favourites-strip" class="sound-strip" role="list"></div>
-      </div>
       <div id="recents-section" class="quick-access__section" hidden>
         <div class="quick-access__header">
           <h2 class="quick-access__title">Recents</h2>
         </div>
         <div id="recents-strip" class="sound-strip" role="list"></div>
+      </div>
+      <div id="favourites-section" class="quick-access__section" hidden>
+        <div class="quick-access__header">
+          <h2 class="quick-access__title">Favourites</h2>
+          <div class="quick-access__controls">
+            <label class="quick-access__rows-control" for="favourites-rows-select">
+              <span data-i18n="quickAccess.rowsLabel">Rows</span>
+              <select id="favourites-rows-select" class="quick-access__rows-select" aria-label="Favourite rows">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+              </select>
+            </label>
+            <button type="button" id="favourites-reorder-toggle" class="btn btn--secondary btn--tiny">Reorder</button>
+          </div>
+        </div>
+        <div id="favourites-strip" class="sound-strip sound-strip--favorites" role="list"></div>
       </div>
     </section>
     <div id="sound-grid" class="grid" role="list"></div>

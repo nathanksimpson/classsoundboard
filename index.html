@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Soundboard</title>
-  <link rel="stylesheet" href="styles.css?v=20260506-5">
+  <link rel="stylesheet" href="styles.css?v=20260506-6">
 </head>
 <body>
   <header class="header">
@@ -87,8 +87,19 @@
             </span>
             <span id="recents-count" class="category__count">0 sounds</span>
           </button>
+          <div class="quick-access__controls">
+            <label class="quick-access__rows-control" for="recents-rows-select">
+              <span data-i18n="quickAccess.rowsLabel">Rows</span>
+              <select id="recents-rows-select" class="quick-access__rows-select" aria-label="Recent rows">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+              </select>
+            </label>
+          </div>
         </div>
-        <div id="recents-strip" class="sound-strip" role="list"></div>
+        <div id="recents-strip" class="sound-strip sound-strip--recents" role="list"></div>
       </div>
       <div id="favourites-section" class="quick-access__section" hidden>
         <div class="quick-access__header">
@@ -277,11 +288,11 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" crossorigin="anonymous"></script>
   <datalist id="category-options"></datalist>
-  <script src="storage.js?v=20260506-5"></script>
-  <script src="local-audio.js?v=20260506-5"></script>
-  <script src="audio-engine.js?v=20260506-5"></script>
-  <script src="board-manager.js?v=20260506-5"></script>
-  <script src="ui-renderer.js?v=20260506-5"></script>
-  <script src="soundboard.js?v=20260506-5"></script>
+  <script src="storage.js?v=20260506-6"></script>
+  <script src="local-audio.js?v=20260506-6"></script>
+  <script src="audio-engine.js?v=20260506-6"></script>
+  <script src="board-manager.js?v=20260506-6"></script>
+  <script src="ui-renderer.js?v=20260506-6"></script>
+  <script src="soundboard.js?v=20260506-6"></script>
 </body>
 </html>

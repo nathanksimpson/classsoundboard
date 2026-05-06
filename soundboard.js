@@ -53,6 +53,7 @@
   const recentsStripEl = document.getElementById('recents-strip');
   const favouritesReorderToggleEl = document.getElementById('favourites-reorder-toggle');
   const favouritesRowsSelectEl = document.getElementById('favourites-rows-select');
+  const recentsRowsSelectEl = document.getElementById('recents-rows-select');
   const recentsCollapseToggleEl = document.getElementById('recents-collapse-toggle');
   const favouritesCollapseToggleEl = document.getElementById('favourites-collapse-toggle');
   const recentsCountEl = document.getElementById('recents-count');
@@ -72,6 +73,7 @@
   const RECENTS_KEY_PREFIX = 'soundboard-recents:';
   const QUICK_ACCESS_COLLAPSED_KEY_PREFIX = 'soundboard-quick-access-collapsed:';
   const FAVOURITES_ROWS_KEY = 'soundboard-favourites-rows';
+  const RECENTS_ROWS_KEY = 'soundboard-recents-rows';
   const FAVOURITES_ROWS_MIN = 1;
   const FAVOURITES_ROWS_MAX = 4;
   const MAX_RECENT_SOUNDS = 20;
@@ -272,6 +274,7 @@
   let favouriteIds = new Set();
   let recentIds = [];
   let favouriteStripRows = 1;
+  let recentStripRows = 1;
   let favouriteReorderMode = false;
   let quickAccessCollapsed = { recents: false, favourites: false };
   let settingsDirty = false;
@@ -521,6 +524,21 @@
   function saveFavouriteRows() {
     try {
       localStorage.setItem(FAVOURITES_ROWS_KEY, String(clampFavouriteRows(favouriteStripRows)));
+    } catch (_) {}
+  }
+
+  function loadRecentRows() {
+    try {
+      const raw = localStorage.getItem(RECENTS_ROWS_KEY);
+      return clampFavouriteRows(raw == null ? FAVOURITES_ROWS_MIN : raw);
+    } catch (_) {
+      return FAVOURITES_ROWS_MIN;
+    }
+  }
+
+  function saveRecentRows() {
+    try {
+      localStorage.setItem(RECENTS_ROWS_KEY, String(clampFavouriteRows(recentStripRows)));
     } catch (_) {}
   }
 
@@ -885,6 +903,14 @@
     render();
   }
 
+  function setRecentStripRows(nextRows) {
+    const clamped = clampFavouriteRows(nextRows);
+    if (clamped === recentStripRows) return;
+    recentStripRows = clamped;
+    saveRecentRows();
+    render();
+  }
+
   function updateFavouritesControls(labels) {
     if (favouritesRowsSelectEl) {
       const normalized = String(clampFavouriteRows(favouriteStripRows));
@@ -896,6 +922,13 @@
       favouritesReorderToggleEl.textContent = favouriteReorderMode
         ? labels.doneReorderingFavourites
         : labels.reorderFavourites;
+    }
+  }
+
+  function updateRecentsControls() {
+    if (recentsRowsSelectEl) {
+      const normalized = String(clampFavouriteRows(recentStripRows));
+      if (recentsRowsSelectEl.value !== normalized) recentsRowsSelectEl.value = normalized;
     }
   }
 
@@ -971,6 +1004,7 @@
     if (recentsSectionEl) recentsSectionEl.hidden = false;
     quickAccessEl.hidden = false;
     updateFavouritesControls(labels);
+    updateRecentsControls();
     updateQuickAccessCollapseControls(labels, {
       recents: strips.recents.length,
       favourites: strips.favourites.length
@@ -979,6 +1013,11 @@
     if (favouritesStripEl) {
       favouritesStripEl.classList.toggle('sound-strip--multirow', stripRows > 1);
       favouritesStripEl.style.setProperty('--favorites-strip-rows', String(stripRows));
+    }
+    const recentRows = clampFavouriteRows(recentStripRows);
+    if (recentsStripEl) {
+      recentsStripEl.classList.toggle('sound-strip--multirow', recentRows > 1);
+      recentsStripEl.style.setProperty('--recents-strip-rows', String(recentRows));
     }
 
     if (hasFavourites && favouritesStripEl) {
@@ -2601,6 +2640,12 @@
         setFavouriteStripRows(favouritesRowsSelectEl.value);
       });
     }
+    if (recentsRowsSelectEl) {
+      recentsRowsSelectEl.value = String(clampFavouriteRows(recentStripRows));
+      recentsRowsSelectEl.addEventListener('change', function () {
+        setRecentStripRows(recentsRowsSelectEl.value);
+      });
+    }
     if (recentsCollapseToggleEl) {
       bindTapAndClick(recentsCollapseToggleEl, function () {
         toggleQuickAccessSectionCollapse('recents');
@@ -2913,6 +2958,7 @@
     initI18n();
     initHeaderCollapse();
     favouriteStripRows = loadFavouriteRows();
+    recentStripRows = loadRecentRows();
     initToolbar();
     initModal();
     initKeyboard();

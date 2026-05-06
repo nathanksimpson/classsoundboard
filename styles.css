@@ -378,15 +378,20 @@ body.body--overlay-open {
   gap: 8px;
 }
 
-.quick-access__section--collapsed .sound-strip {
-  display: none;
-}
-
 .quick-access__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+}
+
+.quick-access__toggle {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.quick-access__section--collapsed .sound-strip {
+  display: none !important;
 }
 
 .quick-access__title {
@@ -401,22 +406,6 @@ body.body--overlay-open {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-}
-
-.quick-access__collapse {
-  min-height: 28px;
-  min-width: 28px;
-  padding: 2px 6px;
-  border-radius: 6px;
-  border: 1px solid rgba(255,255,255,0.2);
-  background: rgba(255,255,255,0.06);
-  color: var(--text-muted);
-  cursor: pointer;
-}
-
-.quick-access__collapse:hover {
-  background: rgba(255,255,255,0.14);
-  color: var(--text);
 }
 
 .quick-access__rows-control {

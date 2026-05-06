@@ -55,6 +55,8 @@
   const favouritesRowsSelectEl = document.getElementById('favourites-rows-select');
   const recentsCollapseToggleEl = document.getElementById('recents-collapse-toggle');
   const favouritesCollapseToggleEl = document.getElementById('favourites-collapse-toggle');
+  const recentsCountEl = document.getElementById('recents-count');
+  const favouritesCountEl = document.getElementById('favourites-count');
 
   function getBoardJsonPath() {
     const base = window.location.pathname.replace(/\/[^/]*$/, '') || '/';
@@ -165,7 +167,8 @@
       'quickAccess.reorderFavourites': 'Reorder',
       'quickAccess.doneReorderingFavourites': 'Done',
       'quickAccess.collapse': 'Collapse',
-      'quickAccess.expand': 'Expand'
+      'quickAccess.expand': 'Expand',
+      'quickAccess.soundCount': '{count} sounds'
     },
     ko: {
       'header.hint': '팁: 보드 이름을 클릭하면 이름을 변경할 수 있습니다.',
@@ -257,7 +260,8 @@
       'quickAccess.reorderFavourites': '순서 변경',
       'quickAccess.doneReorderingFavourites': '완료',
       'quickAccess.collapse': '접기',
-      'quickAccess.expand': '펼치기'
+      'quickAccess.expand': '펼치기',
+      'quickAccess.soundCount': '{count}개'
     }
   };
   let currentLanguage = 'en';
@@ -895,29 +899,34 @@
     }
   }
 
-  function updateQuickAccessCollapseControls(labels) {
+  function updateQuickAccessCollapseControls(labels, counts) {
     const isRecentsCollapsed = !!quickAccessCollapsed.recents;
     const isFavouritesCollapsed = !!quickAccessCollapsed.favourites;
     if (recentsSectionEl) recentsSectionEl.classList.toggle('quick-access__section--collapsed', isRecentsCollapsed);
     if (favouritesSectionEl) favouritesSectionEl.classList.toggle('quick-access__section--collapsed', isFavouritesCollapsed);
 
+    if (recentsCountEl) recentsCountEl.textContent = labels.soundCount.replace('{count}', String(counts.recents));
+    if (favouritesCountEl) favouritesCountEl.textContent = labels.soundCount.replace('{count}', String(counts.favourites));
+
     if (recentsCollapseToggleEl) {
-      recentsCollapseToggleEl.textContent = isRecentsCollapsed ? '\u25B6' : '\u25BC';
       recentsCollapseToggleEl.setAttribute('aria-expanded', isRecentsCollapsed ? 'false' : 'true');
       recentsCollapseToggleEl.setAttribute(
         'aria-label',
         (isRecentsCollapsed ? labels.expand : labels.collapse) + ' ' + labels.recents
       );
       recentsCollapseToggleEl.title = (isRecentsCollapsed ? labels.expand : labels.collapse) + ' ' + labels.recents;
+      const recentsCaret = recentsCollapseToggleEl.querySelector('.quick-access__caret');
+      if (recentsCaret) recentsCaret.textContent = isRecentsCollapsed ? '\u25B6' : '\u25BC';
     }
     if (favouritesCollapseToggleEl) {
-      favouritesCollapseToggleEl.textContent = isFavouritesCollapsed ? '\u25B6' : '\u25BC';
       favouritesCollapseToggleEl.setAttribute('aria-expanded', isFavouritesCollapsed ? 'false' : 'true');
       favouritesCollapseToggleEl.setAttribute(
         'aria-label',
         (isFavouritesCollapsed ? labels.expand : labels.collapse) + ' ' + labels.favourites
       );
       favouritesCollapseToggleEl.title = (isFavouritesCollapsed ? labels.expand : labels.collapse) + ' ' + labels.favourites;
+      const favouritesCaret = favouritesCollapseToggleEl.querySelector('.quick-access__caret');
+      if (favouritesCaret) favouritesCaret.textContent = isFavouritesCollapsed ? '\u25B6' : '\u25BC';
     }
   }
 
@@ -945,7 +954,8 @@
       reorderFavourites: t('quickAccess.reorderFavourites') || 'Reorder',
       doneReorderingFavourites: t('quickAccess.doneReorderingFavourites') || 'Done',
       collapse: t('quickAccess.collapse') || 'Collapse',
-      expand: t('quickAccess.expand') || 'Expand'
+      expand: t('quickAccess.expand') || 'Expand',
+      soundCount: t('quickAccess.soundCount', { count: '{count}' }) || '{count} sounds'
     };
     const favouriteTitle = favouritesSectionEl && favouritesSectionEl.querySelector('.quick-access__title');
     const recentTitle = recentsSectionEl && recentsSectionEl.querySelector('.quick-access__title');
@@ -959,7 +969,10 @@
     if (recentsSectionEl) recentsSectionEl.hidden = false;
     quickAccessEl.hidden = false;
     updateFavouritesControls(labels);
-    updateQuickAccessCollapseControls(labels);
+    updateQuickAccessCollapseControls(labels, {
+      recents: strips.recents.length,
+      favourites: strips.favourites.length
+    });
     const stripRows = clampFavouriteRows(favouriteStripRows);
     if (favouritesStripEl) {
       favouritesStripEl.classList.toggle('sound-strip--multirow', stripRows > 1);

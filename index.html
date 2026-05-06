@@ -80,16 +80,26 @@
     <section id="quick-access" class="quick-access" aria-label="Quick access sounds">
       <div id="recents-section" class="quick-access__section" hidden>
         <div class="quick-access__header">
-          <h2 class="quick-access__title">Recents</h2>
-          <button type="button" id="recents-collapse-toggle" class="quick-access__collapse" aria-expanded="true" aria-label="Collapse recents">▼</button>
+          <button type="button" id="recents-collapse-toggle" class="quick-access__toggle category__header" aria-expanded="true" aria-label="Collapse recents">
+            <span class="category__title">
+              <span class="category__caret quick-access__caret" aria-hidden="true">▼</span>
+              <span class="quick-access__title">Recents</span>
+            </span>
+            <span id="recents-count" class="category__count">0 sounds</span>
+          </button>
         </div>
         <div id="recents-strip" class="sound-strip" role="list"></div>
       </div>
       <div id="favourites-section" class="quick-access__section" hidden>
         <div class="quick-access__header">
-          <h2 class="quick-access__title">Favourites</h2>
+          <button type="button" id="favourites-collapse-toggle" class="quick-access__toggle category__header" aria-expanded="true" aria-label="Collapse favourites">
+            <span class="category__title">
+              <span class="category__caret quick-access__caret" aria-hidden="true">▼</span>
+              <span class="quick-access__title">Favourites</span>
+            </span>
+            <span id="favourites-count" class="category__count">0 sounds</span>
+          </button>
           <div class="quick-access__controls">
-            <button type="button" id="favourites-collapse-toggle" class="quick-access__collapse" aria-expanded="true" aria-label="Collapse favourites">▼</button>
             <label class="quick-access__rows-control" for="favourites-rows-select">
               <span data-i18n="quickAccess.rowsLabel">Rows</span>
               <select id="favourites-rows-select" class="quick-access__rows-select" aria-label="Favourite rows">

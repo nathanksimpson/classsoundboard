@@ -904,6 +904,8 @@
     const isFavouritesCollapsed = !!quickAccessCollapsed.favourites;
     if (recentsSectionEl) recentsSectionEl.classList.toggle('quick-access__section--collapsed', isRecentsCollapsed);
     if (favouritesSectionEl) favouritesSectionEl.classList.toggle('quick-access__section--collapsed', isFavouritesCollapsed);
+    if (recentsStripEl) recentsStripEl.style.display = isRecentsCollapsed ? 'none' : '';
+    if (favouritesStripEl) favouritesStripEl.style.display = isFavouritesCollapsed ? 'none' : '';
 
     if (recentsCountEl) recentsCountEl.textContent = labels.soundCount.replace('{count}', String(counts.recents));
     if (favouritesCountEl) favouritesCountEl.textContent = labels.soundCount.replace('{count}', String(counts.favourites));

@@ -394,12 +394,22 @@ body.body--overlay-open {
   display: none !important;
 }
 
+.quick-access__section--collapsed .quick-access__controls {
+  display: none !important;
+}
+
 .quick-access__title {
   margin: 0;
   font-size: 0.92rem;
   color: var(--text-muted);
   letter-spacing: 0.03em;
   text-transform: uppercase;
+}
+
+.quick-access__toggle .quick-access__title {
+  color: var(--text);
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .quick-access__controls {

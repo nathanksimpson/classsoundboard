@@ -53,6 +53,8 @@
   const recentsStripEl = document.getElementById('recents-strip');
   const favouritesReorderToggleEl = document.getElementById('favourites-reorder-toggle');
   const favouritesRowsSelectEl = document.getElementById('favourites-rows-select');
+  const recentsCollapseToggleEl = document.getElementById('recents-collapse-toggle');
+  const favouritesCollapseToggleEl = document.getElementById('favourites-collapse-toggle');
 
   function getBoardJsonPath() {
     const base = window.location.pathname.replace(/\/[^/]*$/, '') || '/';
@@ -66,6 +68,7 @@
   const HEADER_COLLAPSED_KEY = 'soundboard-header-collapsed';
   const FAVOURITES_KEY_PREFIX = 'soundboard-favourites:';
   const RECENTS_KEY_PREFIX = 'soundboard-recents:';
+  const QUICK_ACCESS_COLLAPSED_KEY_PREFIX = 'soundboard-quick-access-collapsed:';
   const FAVOURITES_ROWS_KEY = 'soundboard-favourites-rows';
   const FAVOURITES_ROWS_MIN = 1;
   const FAVOURITES_ROWS_MAX = 4;
@@ -160,7 +163,9 @@
       'quickAccess.emptyRecents': 'No recent plays yet. Play a sound to populate this list.',
       'quickAccess.rowsLabel': 'Rows',
       'quickAccess.reorderFavourites': 'Reorder',
-      'quickAccess.doneReorderingFavourites': 'Done'
+      'quickAccess.doneReorderingFavourites': 'Done',
+      'quickAccess.collapse': 'Collapse',
+      'quickAccess.expand': 'Expand'
     },
     ko: {
       'header.hint': '팁: 보드 이름을 클릭하면 이름을 변경할 수 있습니다.',
@@ -250,7 +255,9 @@
       'quickAccess.emptyRecents': '최근 재생 목록이 비어 있습니다. 사운드를 재생하면 여기에 표시됩니다.',
       'quickAccess.rowsLabel': '행',
       'quickAccess.reorderFavourites': '순서 변경',
-      'quickAccess.doneReorderingFavourites': '완료'
+      'quickAccess.doneReorderingFavourites': '완료',
+      'quickAccess.collapse': '접기',
+      'quickAccess.expand': '펼치기'
     }
   };
   let currentLanguage = 'en';
@@ -262,6 +269,7 @@
   let recentIds = [];
   let favouriteStripRows = 1;
   let favouriteReorderMode = false;
+  let quickAccessCollapsed = { recents: false, favourites: false };
   let settingsDirty = false;
   let settingsRenderIndex = 0;
   let settingsPreviouslyFocused = null;
@@ -427,6 +435,11 @@
     return RECENTS_KEY_PREFIX + boardId;
   }
 
+  function getQuickAccessCollapsedStorageKey() {
+    const boardId = currentBoard && currentBoard.id ? String(currentBoard.id) : 'default';
+    return QUICK_ACCESS_COLLAPSED_KEY_PREFIX + boardId;
+  }
+
   function loadFavourites() {
     try {
       const raw = localStorage.getItem(getFavouritesStorageKey());
@@ -460,6 +473,29 @@
   function saveRecents() {
     try {
       localStorage.setItem(getRecentsStorageKey(), JSON.stringify(recentIds));
+    } catch (_) {}
+  }
+
+  function loadQuickAccessCollapsedState() {
+    try {
+      const raw = localStorage.getItem(getQuickAccessCollapsedStorageKey());
+      if (!raw) return { recents: false, favourites: false };
+      const parsed = JSON.parse(raw);
+      return {
+        recents: !!(parsed && parsed.recents),
+        favourites: !!(parsed && parsed.favourites)
+      };
+    } catch (_) {
+      return { recents: false, favourites: false };
+    }
+  }
+
+  function saveQuickAccessCollapsedState() {
+    try {
+      localStorage.setItem(getQuickAccessCollapsedStorageKey(), JSON.stringify({
+        recents: !!quickAccessCollapsed.recents,
+        favourites: !!quickAccessCollapsed.favourites
+      }));
     } catch (_) {}
   }
 
@@ -859,6 +895,39 @@
     }
   }
 
+  function updateQuickAccessCollapseControls(labels) {
+    const isRecentsCollapsed = !!quickAccessCollapsed.recents;
+    const isFavouritesCollapsed = !!quickAccessCollapsed.favourites;
+    if (recentsSectionEl) recentsSectionEl.classList.toggle('quick-access__section--collapsed', isRecentsCollapsed);
+    if (favouritesSectionEl) favouritesSectionEl.classList.toggle('quick-access__section--collapsed', isFavouritesCollapsed);
+
+    if (recentsCollapseToggleEl) {
+      recentsCollapseToggleEl.textContent = isRecentsCollapsed ? '\u25B6' : '\u25BC';
+      recentsCollapseToggleEl.setAttribute('aria-expanded', isRecentsCollapsed ? 'false' : 'true');
+      recentsCollapseToggleEl.setAttribute(
+        'aria-label',
+        (isRecentsCollapsed ? labels.expand : labels.collapse) + ' ' + labels.recents
+      );
+      recentsCollapseToggleEl.title = (isRecentsCollapsed ? labels.expand : labels.collapse) + ' ' + labels.recents;
+    }
+    if (favouritesCollapseToggleEl) {
+      favouritesCollapseToggleEl.textContent = isFavouritesCollapsed ? '\u25B6' : '\u25BC';
+      favouritesCollapseToggleEl.setAttribute('aria-expanded', isFavouritesCollapsed ? 'false' : 'true');
+      favouritesCollapseToggleEl.setAttribute(
+        'aria-label',
+        (isFavouritesCollapsed ? labels.expand : labels.collapse) + ' ' + labels.favourites
+      );
+      favouritesCollapseToggleEl.title = (isFavouritesCollapsed ? labels.expand : labels.collapse) + ' ' + labels.favourites;
+    }
+  }
+
+  function toggleQuickAccessSectionCollapse(sectionKey) {
+    const key = sectionKey === 'favourites' ? 'favourites' : 'recents';
+    quickAccessCollapsed[key] = !quickAccessCollapsed[key];
+    saveQuickAccessCollapsedState();
+    render();
+  }
+
   function recordRecentPlay(soundId) {
     const id = String(soundId || '').trim();
     if (!id) return;
@@ -874,7 +943,9 @@
       emptyFavourites: t('quickAccess.emptyFavourites') || 'No favourites yet. Tap the star on a sound tile.',
       emptyRecents: t('quickAccess.emptyRecents') || 'No recent plays yet. Play a sound to populate this list.',
       reorderFavourites: t('quickAccess.reorderFavourites') || 'Reorder',
-      doneReorderingFavourites: t('quickAccess.doneReorderingFavourites') || 'Done'
+      doneReorderingFavourites: t('quickAccess.doneReorderingFavourites') || 'Done',
+      collapse: t('quickAccess.collapse') || 'Collapse',
+      expand: t('quickAccess.expand') || 'Expand'
     };
     const favouriteTitle = favouritesSectionEl && favouritesSectionEl.querySelector('.quick-access__title');
     const recentTitle = recentsSectionEl && recentsSectionEl.querySelector('.quick-access__title');
@@ -888,6 +959,7 @@
     if (recentsSectionEl) recentsSectionEl.hidden = false;
     quickAccessEl.hidden = false;
     updateFavouritesControls(labels);
+    updateQuickAccessCollapseControls(labels);
     const stripRows = clampFavouriteRows(favouriteStripRows);
     if (favouritesStripEl) {
       favouritesStripEl.classList.toggle('sound-strip--multirow', stripRows > 1);
@@ -1068,6 +1140,7 @@
     categoryOrder = loadCategoryOrder();
     favouriteIds = loadFavourites();
     recentIds = loadRecents();
+    quickAccessCollapsed = loadQuickAccessCollapsedState();
     favouriteReorderMode = false;
     reorderMode = false;
     pruneQuickAccessState();
@@ -2511,6 +2584,16 @@
       favouritesRowsSelectEl.value = String(clampFavouriteRows(favouriteStripRows));
       favouritesRowsSelectEl.addEventListener('change', function () {
         setFavouriteStripRows(favouritesRowsSelectEl.value);
+      });
+    }
+    if (recentsCollapseToggleEl) {
+      bindTapAndClick(recentsCollapseToggleEl, function () {
+        toggleQuickAccessSectionCollapse('recents');
+      });
+    }
+    if (favouritesCollapseToggleEl) {
+      bindTapAndClick(favouritesCollapseToggleEl, function () {
+        toggleQuickAccessSectionCollapse('favourites');
       });
     }
     if (globalVolumeEl && Audio) {

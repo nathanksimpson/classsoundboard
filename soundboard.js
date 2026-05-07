@@ -46,6 +46,8 @@
   const helpScreenEl = document.getElementById('help-screen');
   const headerEl = document.querySelector('.header');
   const headerToggleBtn = document.getElementById('header-toggle');
+  const headerPopoutEl = document.getElementById('header-popout');
+  const headerPopoutCloseBtn = document.getElementById('header-popout-close');
   const quickAccessEl = document.getElementById('quick-access');
   const favouritesSectionEl = document.getElementById('favourites-section');
   const favouritesStripEl = document.getElementById('favourites-strip');
@@ -58,6 +60,12 @@
   const favouritesCollapseToggleEl = document.getElementById('favourites-collapse-toggle');
   const recentsCountEl = document.getElementById('recents-count');
   const favouritesCountEl = document.getElementById('favourites-count');
+  const portableReportEl = document.getElementById('portable-report');
+  const portableReportCloseBtn = document.getElementById('portable-report-close');
+  const portableReportCopyBtn = document.getElementById('portable-report-copy');
+  const portableReportTitleEl = document.getElementById('portable-report-title');
+  const portableReportSummaryEl = document.getElementById('portable-report-summary');
+  const portableReportListEl = document.getElementById('portable-report-list');
 
   function getBoardJsonPath() {
     const base = window.location.pathname.replace(/\/[^/]*$/, '') || '/';
@@ -68,7 +76,6 @@
   const CATEGORY_ORDER_KEY_PREFIX = 'soundboard-category-order:';
   const AUTO_LEVEL_KEY = 'soundboard-auto-level';
   const LANGUAGE_KEY = 'soundboard-language';
-  const HEADER_COLLAPSED_KEY = 'soundboard-header-collapsed';
   const FAVOURITES_KEY_PREFIX = 'soundboard-favourites:';
   const RECENTS_KEY_PREFIX = 'soundboard-recents:';
   const QUICK_ACCESS_COLLAPSED_KEY_PREFIX = 'soundboard-quick-access-collapsed:';
@@ -81,6 +88,11 @@
   const I18N = {
     en: {
       'header.hint': 'Tip: click the board name to rename it.',
+      'header.moreButton': 'Settings',
+      'header.menu.settings': 'Manage All Sounds',
+      'header.menu.help': 'How to Use',
+      'header.menu.compactOn': 'Compact Top Bar: On',
+      'header.menu.compactOff': 'Compact Top Bar: Off',
       'toolbar.group.create': 'Create/Edit',
       'toolbar.add': 'Add Sound',
       'toolbar.webAdd': 'Add Web Sound',
@@ -92,13 +104,17 @@
       'toolbar.help': 'How to Use',
       'toolbar.group.board': 'Board File',
       'toolbar.export': 'Export Board',
+      'toolbar.exportPortable': 'Export Portable ZIP',
+      'toolbar.exportPortableTitle': 'Export a .zip with board + audio + images (offline portable)',
+      'toolbar.portableCheck': 'Portable readiness check',
+      'toolbar.portableCheckTitle': 'Check if your board is ready for portable ZIP (offline) export',
       'toolbar.clearData': 'Clear All Data',
       'toolbar.clearDataTitle': 'Clear all saved board/app data and reset to defaults',
       'toolbar.importDropzone': 'Import Sounds (Drag and drop or click)',
       'toolbar.importDropzoneTitle': 'Import sounds: drag and drop a .json board file, or click to choose one',
       'toolbar.group.audio': 'Audio Tools',
-      'toolbar.downloadAll': 'Download all sounds',
-      'toolbar.downloadAllTitle': 'Download each sound, save to a folder (or into the app), then update the board to use local copies',
+      'toolbar.downloadMedia': 'Download media',
+      'toolbar.downloadMediaTitle': 'Download audio + images, save into the app, and update the board to use local copies',
       'toolbar.autoLevel': 'Auto level',
       'toolbar.analyzeAll': 'Analyze all',
       'toolbar.analyzeAllTitle': 'Analyze all sounds for consistent volume (recommended once per board)',
@@ -152,7 +168,7 @@
       'status.analysisUnavailable': 'Analysis not available.',
       'status.analyzingProgress': 'Analyzing {current}/{total}…',
       'status.analyzeComplete': 'Analyze complete.',
-      'status.invalidImportFile': 'Please drop a valid .json board file.',
+      'status.invalidImportFile': 'Please drop a valid .json or .zip board file.',
       'status.clearedAllData': 'All saved data cleared. Loaded default board.',
       'confirm.clearAllData': 'Clear all saved data (board, settings, local audio cache) and reset to defaults?',
       'board.defaultName': 'Soundboard',
@@ -174,6 +190,11 @@
     },
     ko: {
       'header.hint': '팁: 보드 이름을 클릭하면 이름을 변경할 수 있습니다.',
+      'header.moreButton': '설정',
+      'header.menu.settings': '전체 사운드 관리',
+      'header.menu.help': '사용 방법',
+      'header.menu.compactOn': '상단바 간단 모드: 켜짐',
+      'header.menu.compactOff': '상단바 간단 모드: 꺼짐',
       'toolbar.group.create': '생성/편집',
       'toolbar.add': '사운드 추가',
       'toolbar.webAdd': '웹 사운드 추가',
@@ -185,13 +206,17 @@
       'toolbar.help': '사용 방법',
       'toolbar.group.board': '보드 파일',
       'toolbar.export': '보드 내보내기',
+      'toolbar.exportPortable': '휴대용 ZIP 내보내기',
+      'toolbar.exportPortableTitle': '보드 + 오디오 + 이미지가 포함된 .zip 내보내기(오프라인용)',
+      'toolbar.portableCheck': '휴대용 준비 상태 점검',
+      'toolbar.portableCheckTitle': '보드가 휴대용 ZIP(오프라인) 내보내기 준비가 되었는지 점검',
       'toolbar.clearData': '전체 데이터 삭제',
       'toolbar.clearDataTitle': '저장된 보드/앱 데이터를 모두 삭제하고 기본값으로 재설정',
       'toolbar.importDropzone': '사운드 가져오기 (드래그 앤 드롭 또는 클릭)',
       'toolbar.importDropzoneTitle': '사운드 가져오기: .json 보드 파일을 드래그 앤 드롭하거나 클릭해 선택하세요',
       'toolbar.group.audio': '오디오 도구',
-      'toolbar.downloadAll': '모든 사운드 다운로드',
-      'toolbar.downloadAllTitle': '각 사운드를 다운로드하여 폴더(또는 앱)로 저장 후 로컬 파일로 업데이트',
+      'toolbar.downloadMedia': '미디어 다운로드',
+      'toolbar.downloadMediaTitle': '오디오 + 이미지를 다운로드해 앱에 저장하고 로컬 파일로 업데이트',
       'toolbar.autoLevel': '자동 레벨',
       'toolbar.analyzeAll': '전체 분석',
       'toolbar.analyzeAllTitle': '모든 사운드를 분석해 볼륨을 맞춥니다(보드당 1회 권장)',
@@ -245,7 +270,7 @@
       'status.analysisUnavailable': '분석 기능을 사용할 수 없습니다.',
       'status.analyzingProgress': '{current}/{total} 분석 중…',
       'status.analyzeComplete': '분석 완료.',
-      'status.invalidImportFile': '올바른 .json 보드 파일을 드롭해 주세요.',
+      'status.invalidImportFile': '올바른 .json 또는 .zip 보드 파일을 드롭해 주세요.',
       'status.clearedAllData': '저장된 모든 데이터를 삭제하고 기본 보드를 불러왔습니다.',
       'confirm.clearAllData': '저장된 모든 데이터(보드, 설정, 로컬 오디오 캐시)를 삭제하고 기본값으로 재설정할까요?',
       'board.defaultName': '사운드보드',
@@ -331,6 +356,7 @@
     updateHotkeyOnlyButton();
     updateSearchCount((getFilteredSounds() || []).length, currentBoard && currentBoard.sounds ? currentBoard.sounds.length : 0);
     updateSettingsRenderedCount();
+    if (headerToggleBtn) headerToggleBtn.title = t('header.moreButton') || 'Settings';
   }
 
   function setLanguage(lang) {
@@ -362,28 +388,98 @@
     applyTranslations();
   }
 
-  function setHeaderCollapsed(collapsed) {
-    if (!headerEl) return;
-    const isCollapsed = !!collapsed;
-    headerEl.classList.toggle('header--collapsed', isCollapsed);
-    if (headerToggleBtn) {
-      headerToggleBtn.setAttribute('aria-pressed', isCollapsed ? 'true' : 'false');
-      headerToggleBtn.textContent = isCollapsed ? '▸ More' : '▾ More';
-      headerToggleBtn.title = isCollapsed ? 'Show more top-bar controls' : 'Show fewer top-bar controls';
-    }
-    try { localStorage.setItem(HEADER_COLLAPSED_KEY, isCollapsed ? 'true' : 'false'); } catch (_) {}
+  function setHeaderPopoutOpen(open) {
+    if (!headerPopoutEl || !headerToggleBtn) return;
+    const isOpen = !!open;
+    headerPopoutEl.hidden = !isOpen;
+    headerToggleBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
   }
 
-  function initHeaderCollapse() {
-    if (!headerEl || !headerToggleBtn) return;
-    let collapsed = false;
+  function toggleHeaderPopout() {
+    if (!headerPopoutEl) return;
+    setHeaderPopoutOpen(!!headerPopoutEl.hidden);
+  }
+
+  function openPortableReport(title, summary, warnings) {
+    if (!portableReportEl) return;
+    if (portableReportTitleEl) portableReportTitleEl.textContent = title || 'Portable report';
+    if (portableReportSummaryEl) portableReportSummaryEl.textContent = summary || '';
+    if (portableReportListEl) {
+      portableReportListEl.textContent = '';
+      (Array.isArray(warnings) ? warnings : []).forEach((w) => {
+        const li = document.createElement('li');
+        li.textContent = String(w);
+        portableReportListEl.appendChild(li);
+      });
+    }
+    portableReportEl.hidden = false;
+    portableReportEl.setAttribute('aria-hidden', 'false');
+  }
+
+  function closePortableReport() {
+    if (!portableReportEl) return;
+    portableReportEl.hidden = true;
+    portableReportEl.setAttribute('aria-hidden', 'true');
+  }
+
+  async function copyPortableReportToClipboard() {
+    const title = portableReportTitleEl ? portableReportTitleEl.textContent : 'Portable report';
+    const summary = portableReportSummaryEl ? portableReportSummaryEl.textContent : '';
+    const items = portableReportListEl ? Array.from(portableReportListEl.querySelectorAll('li')).map((li) => li.textContent) : [];
+    const text = [title, summary, '', ...items.map((x) => '- ' + x)].filter((x) => x != null).join('\n');
+
     try {
-      const raw = localStorage.getItem(HEADER_COLLAPSED_KEY);
-      collapsed = raw === 'true';
-    } catch (_) {}
-    setHeaderCollapsed(collapsed);
-    headerToggleBtn.addEventListener('click', function () {
-      setHeaderCollapsed(!headerEl.classList.contains('header--collapsed'));
+      if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      if (downloadStatus) {
+        downloadStatus.textContent = 'Warnings copied to clipboard.';
+        setTimeout(function () { if (downloadStatus) downloadStatus.textContent = ''; }, 1800);
+      }
+    } catch (e) {
+      alert('Copy failed. You can select and copy the list manually.');
+    }
+  }
+
+  function initHeaderMenu() {
+    if (!headerToggleBtn || !headerPopoutEl) return;
+    setHeaderPopoutOpen(false);
+
+    headerToggleBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      toggleHeaderPopout();
+    });
+    if (headerPopoutCloseBtn) {
+      headerPopoutCloseBtn.addEventListener('click', function () {
+        setHeaderPopoutOpen(false);
+      });
+    }
+    headerPopoutEl.addEventListener('click', function (e) {
+      if (e.target && e.target.classList && e.target.classList.contains('header__popout-backdrop')) {
+        setHeaderPopoutOpen(false);
+      }
+    });
+    document.addEventListener('click', function (e) {
+      if (headerPopoutEl.hidden) return;
+      if (headerPopoutEl.contains(e.target)) return;
+      if (headerToggleBtn.contains(e.target)) return;
+      setHeaderPopoutOpen(false);
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      if (headerPopoutEl.hidden) return;
+      e.preventDefault();
+      setHeaderPopoutOpen(false);
     });
   }
 
@@ -1834,6 +1930,7 @@
       ];
       let title = 'Blerp ' + soundId;
       let fileUrl = null;
+      let imageUrl = '';
       for (const target of fetchTargets) {
         try {
           const res = await fetch(target);
@@ -1841,6 +1938,8 @@
           const text = await res.text();
           const titleMatch = text.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i);
           if (titleMatch && titleMatch[1]) title = titleMatch[1];
+          const imgMatch = text.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i);
+          if (imgMatch && imgMatch[1]) imageUrl = imgMatch[1];
           const parsedAudio = parseFirstAudioUrlFromText(text);
           if (parsedAudio) {
             fileUrl = parsedAudio;
@@ -1852,6 +1951,7 @@
         createDraftWebSound({
           title,
           fileUrl: '',
+          imageUrl,
           category: 'Blerp',
           extra: { source: 'blerp', blerpUrl: normalized, blerpId: soundId }
         });
@@ -1861,6 +1961,7 @@
       createDraftWebSound({
         title,
         fileUrl,
+        imageUrl,
         category: 'Blerp',
         extra: { source: 'blerp', blerpUrl: normalized, blerpId: soundId }
       });
@@ -2202,9 +2303,292 @@
     URL.revokeObjectURL(a.href);
   }
 
-  function downloadAllSounds() {
+  function guessMimeFromPath(path, fallback = 'application/octet-stream') {
+    const p = String(path || '').toLowerCase();
+    if (p.endsWith('.png')) return 'image/png';
+    if (p.endsWith('.jpg') || p.endsWith('.jpeg')) return 'image/jpeg';
+    if (p.endsWith('.webp')) return 'image/webp';
+    if (p.endsWith('.gif')) return 'image/gif';
+    if (p.endsWith('.svg')) return 'image/svg+xml';
+    if (p.endsWith('.mp3')) return 'audio/mpeg';
+    if (p.endsWith('.wav')) return 'audio/wav';
+    if (p.endsWith('.ogg')) return 'audio/ogg';
+    if (p.endsWith('.m4a')) return 'audio/mp4';
+    return fallback;
+  }
+
+  function safeFilenamePart(value) {
+    return String(value || '')
+      .trim()
+      .replace(/[^a-z0-9-_\.]/gi, '-')
+      .replace(/-+/g, '-')
+      .slice(0, 80) || 'file';
+  }
+
+  function arrayBufferToBase64(buf) {
+    const bytes = new Uint8Array(buf);
+    const chunkSize = 0x8000;
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+    }
+    return btoa(binary);
+  }
+
+  async function exportPortableZip() {
+    if (!currentBoard) return;
+    if (!window.JSZip) {
+      alert('ZIP export not available (JSZip missing).');
+      return;
+    }
+    const LocalAudio = window.SoundboardLocalAudio;
+    if (!LocalAudio || !LocalAudio.getBlob) {
+      alert('Portable export requires local storage (IndexedDB) support.');
+      return;
+    }
+
+    const zip = new window.JSZip();
+    const normalized = Board.normalizeBoard(currentBoard);
+    const portable = JSON.parse(JSON.stringify(normalized));
+    const warnings = [];
+
+    const audioFolder = zip.folder('audio');
+    const imagesFolder = zip.folder('images');
+
+    const total = Array.isArray(portable.sounds) ? portable.sounds.length : 0;
+    let done = 0;
+    if (downloadStatus) downloadStatus.textContent = 'Building portable zip…';
+
+    for (const s of portable.sounds) {
+      done++;
+      if (downloadStatus) downloadStatus.textContent = 'Packing ' + done + '/' + total + '…';
+      const id = String(s.id || '');
+
+      // Audio
+      try {
+        const fileUrl = String(s.fileUrl || '');
+        const audioPath = 'audio/' + safeFilenamePart(id) + '.mp3';
+        if (fileUrl.startsWith('local:')) {
+          const blobId = fileUrl.slice(6);
+          const buf = await LocalAudio.getBlob(blobId);
+          if (buf) {
+            audioFolder.file(safeFilenamePart(id) + '.mp3', buf);
+            s.fileUrl = 'zip:' + audioPath;
+          } else {
+            warnings.push('Missing local audio for ' + id);
+          }
+        } else if (fileUrl) {
+          const res = await fetch(fileUrl, { mode: 'cors' });
+          if (!res.ok) throw new Error(res.statusText || 'fetch failed');
+          const buf = await res.arrayBuffer();
+          audioFolder.file(safeFilenamePart(id) + '.mp3', buf);
+          s.fileUrl = 'zip:' + audioPath;
+        }
+      } catch (e) {
+        warnings.push('Audio fetch failed for ' + (s.title || s.id) + ': ' + (e && e.message ? e.message : 'error'));
+      }
+
+      // Image
+      try {
+        const imageUrl = String(s.imageUrl || '').trim();
+        if (!imageUrl) continue;
+        if (imageUrl.startsWith('data:')) continue; // already portable
+        if (imageUrl.startsWith('zip:')) continue;
+        const res = await fetch(imageUrl, { mode: 'cors' });
+        if (!res.ok) throw new Error(res.statusText || 'fetch failed');
+        const buf = await res.arrayBuffer();
+        const contentType = res.headers && res.headers.get ? res.headers.get('content-type') : '';
+        const ext = (contentType && contentType.includes('png')) ? 'png'
+          : (contentType && (contentType.includes('jpeg') || contentType.includes('jpg'))) ? 'jpg'
+            : (contentType && contentType.includes('webp')) ? 'webp'
+              : 'jpg';
+        const imgName = safeFilenamePart(id) + '.' + ext;
+        imagesFolder.file(imgName, buf);
+        s.imageUrl = 'zip:images/' + imgName;
+      } catch (e) {
+        warnings.push('Image fetch failed for ' + (s.title || s.id) + ': ' + (e && e.message ? e.message : 'error'));
+      }
+    }
+
+    zip.file('board.json', JSON.stringify(portable, null, 2));
+    zip.file('manifest.json', JSON.stringify({
+      type: 'soundboard-portable',
+      schemaVersion: 1,
+      createdAt: new Date().toISOString(),
+      boardName: portable.name || ''
+    }, null, 2));
+
+    const out = await zip.generateAsync({ type: 'blob' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(out);
+    a.download = safeFilenamePart(portable.name || 'board') + '-portable.zip';
+    a.click();
+    URL.revokeObjectURL(a.href);
+
+    if (downloadStatus) downloadStatus.textContent = warnings.length ? ('Portable ZIP exported (with ' + warnings.length + ' warnings).') : 'Portable ZIP exported.';
+    if (warnings.length) {
+      console.warn('portable export warnings', warnings);
+      openPortableReport('Portable export warnings', 'Some files could not be bundled. Those sounds/images may still require an internet connection.', warnings);
+      setTimeout(function () { if (downloadStatus) downloadStatus.textContent = ''; }, 4500);
+    } else {
+      setTimeout(function () { if (downloadStatus) downloadStatus.textContent = ''; }, 2500);
+    }
+  }
+
+  async function importPortableZip(file) {
+    if (!file) return;
+    if (!window.JSZip) {
+      alert('ZIP import not available (JSZip missing).');
+      return;
+    }
+    const LocalAudio = window.SoundboardLocalAudio;
+    if (!LocalAudio || !LocalAudio.putBlob) {
+      alert('Portable import requires local storage (IndexedDB) support.');
+      return;
+    }
+    if (downloadStatus) downloadStatus.textContent = 'Reading zip…';
+    const buf = await (file.arrayBuffer ? file.arrayBuffer() : new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = () => reject(r.error);
+      r.readAsArrayBuffer(file);
+    }));
+    const zip = await window.JSZip.loadAsync(buf);
+    const boardFile = zip.file('board.json');
+    if (!boardFile) {
+      alert('ZIP missing board.json');
+      return;
+    }
+    const boardText = await boardFile.async('text');
+    const parsed = JSON.parse(boardText);
+    const result = Board.validateBoard(parsed);
+    if (!result.ok) {
+      alert('Invalid board in ZIP: ' + (result.error || 'unknown'));
+      return;
+    }
+    const board = Board.normalizeBoard(parsed);
+    const sounds = Array.isArray(board.sounds) ? board.sounds : [];
+    const warnings = [];
+    let i = 0;
+    for (const s of sounds) {
+      i++;
+      if (downloadStatus) downloadStatus.textContent = 'Importing ' + i + '/' + sounds.length + '…';
+
+      // Audio from zip:
+      const fu = String(s.fileUrl || '');
+      if (fu.startsWith('zip:')) {
+        const path = fu.slice(4);
+        const zf = zip.file(path);
+        if (zf) {
+          const ab = await zf.async('arraybuffer');
+          const blobId = 'portable-' + String(s.id);
+          await LocalAudio.putBlob(blobId, ab);
+          s.fileUrl = 'local:' + blobId;
+        } else {
+          warnings.push('Missing audio in zip: ' + path);
+        }
+      }
+
+      // Image from zip -> embed as data URL:
+      const iu = String(s.imageUrl || '');
+      if (iu.startsWith('zip:')) {
+        const path = iu.slice(4);
+        const zf = zip.file(path);
+        if (zf) {
+          const ab = await zf.async('arraybuffer');
+          const mime = guessMimeFromPath(path, 'image/jpeg');
+          const b64 = arrayBufferToBase64(ab);
+          s.imageUrl = 'data:' + mime + ';base64,' + b64;
+        } else {
+          warnings.push('Missing image in zip: ' + path);
+        }
+      }
+    }
+
+    setBoard(board);
+    saveToStorage();
+    if (Audio && Audio.clearCache) Audio.clearCache();
+    render();
+    if (warnings.length) {
+      openPortableReport('Portable import warnings', 'Some files referenced in the board could not be found in the ZIP.', warnings);
+    }
+    if (downloadStatus) {
+      downloadStatus.textContent = warnings.length ? 'Portable ZIP imported (with warnings).' : 'Portable ZIP imported.';
+      setTimeout(function () { if (downloadStatus) downloadStatus.textContent = ''; }, warnings.length ? 4500 : 2500);
+    }
+  }
+
+  async function runPortableReadinessCheck() {
+    if (!currentBoard || !Array.isArray(currentBoard.sounds)) return;
+    const LocalAudio = window.SoundboardLocalAudio;
+    const warnings = [];
+    const sounds = currentBoard.sounds.slice();
+    const total = sounds.length;
+
+    let okAudio = 0;
+    let okImage = 0;
+    let needsNetAudio = 0;
+    let needsNetImage = 0;
+
+    for (let i = 0; i < total; i++) {
+      const s = sounds[i];
+      if (downloadStatus) downloadStatus.textContent = 'Checking portable readiness ' + (i + 1) + '/' + total + '…';
+
+      const title = (s && (s.title || s.id)) ? String(s.title || s.id) : 'sound';
+      const fileUrl = String((s && s.fileUrl) || '').trim();
+      const imageUrl = String((s && s.imageUrl) || '').trim();
+
+      // Audio
+      if (!fileUrl) {
+        warnings.push('Missing audio URL: ' + title);
+      } else if (fileUrl.startsWith('local:')) {
+        if (LocalAudio && LocalAudio.getBlob) {
+          try {
+            const blobId = fileUrl.slice(6);
+            const buf = await LocalAudio.getBlob(blobId);
+            if (buf) okAudio++;
+            else warnings.push('Missing local audio blob: ' + title + ' (' + blobId + ')');
+          } catch (_) {
+            warnings.push('Failed reading local audio blob: ' + title);
+          }
+        } else {
+          warnings.push('Local audio storage not available: ' + title);
+        }
+      } else {
+        // Remote – may be blocked by CORS on export.
+        needsNetAudio++;
+      }
+
+      // Image
+      if (!imageUrl) {
+        okImage++; // images are optional
+      } else if (imageUrl.startsWith('data:')) {
+        okImage++;
+      } else if (imageUrl.startsWith('zip:')) {
+        okImage++;
+      } else {
+        needsNetImage++;
+      }
+    }
+
+    if (downloadStatus) downloadStatus.textContent = '';
+    const summary = [
+      'Audio: ' + okAudio + '/' + total + ' already local; ' + needsNetAudio + ' remote (may be blocked by CORS).',
+      'Images: ' + okImage + '/' + total + ' already portable/blank; ' + needsNetImage + ' remote (may be blocked by CORS).',
+      '',
+      'Tip: run “Download all sounds” first, then export Portable ZIP.'
+    ].join(' ');
+
+    const list = warnings.slice();
+    if (needsNetAudio > 0) list.push('Remote audio files will only bundle if the host allows browser downloads (CORS).');
+    if (needsNetImage > 0) list.push('Remote image files will only bundle if the host allows browser downloads (CORS).');
+
+    openPortableReport('Portable readiness check', summary, list.length ? list : ['Looks good — no obvious blockers found.']);
+  }
+
+  function downloadAllMedia() {
     if (!currentBoard || !currentBoard.sounds || currentBoard.sounds.length === 0) {
-      if (downloadStatus) downloadStatus.textContent = 'No sounds to download.';
+      if (downloadStatus) downloadStatus.textContent = 'No media to download.';
       return;
     }
     const LocalAudio = window.SoundboardLocalAudio;
@@ -2212,40 +2596,71 @@
       if (downloadStatus) downloadStatus.textContent = 'Local storage not available.';
       return;
     }
-    var remoteSounds = currentBoard.sounds.filter(function (s) {
+    var pendingAudio = currentBoard.sounds.filter(function (s) {
       return s && s.fileUrl && s.fileUrl.trim() && !String(s.fileUrl).startsWith('local:');
     });
-    if (remoteSounds.length === 0) {
-      if (downloadStatus) downloadStatus.textContent = 'All sounds already saved locally.';
+    var pendingImages = currentBoard.sounds.filter(function (s) {
+      const url = s && s.imageUrl ? String(s.imageUrl).trim() : '';
+      if (!url) return false;
+      if (url.startsWith('data:')) return false;
+      if (url.startsWith('zip:')) return false;
+      return true;
+    });
+    if (pendingAudio.length === 0 && pendingImages.length === 0) {
+      if (downloadStatus) downloadStatus.textContent = 'All media already saved locally.';
       setTimeout(function () { if (downloadStatus) downloadStatus.textContent = ''; }, 2500);
       return;
     }
     const btn = toolbarEl && toolbarEl.querySelector('[data-action="download-sounds"]');
     if (btn) btn.disabled = true;
-    const total = remoteSounds.length;
+    const total = pendingAudio.length + pendingImages.length;
     const results = [];
+    const imgResults = [];
+    const warnings = [];
 
-    function fetchOne(index) {
-      if (index >= total) {
-        applyLocalAndSave(results);
+    function fetchAudio(index) {
+      if (index >= pendingAudio.length) {
+        fetchImage(0);
         return;
       }
-      const s = remoteSounds[index];
+      const s = pendingAudio[index];
       const filename = (s.title || s.id || 'sound-' + (index + 1)).replace(/[^a-z0-9-_\.]/gi, '-').slice(0, 80) + '.mp3';
-      if (downloadStatus) downloadStatus.textContent = 'Downloading ' + (index + 1) + '/' + total + '…';
+      const stepN = index + 1;
+      if (downloadStatus) downloadStatus.textContent = 'Downloading audio ' + stepN + '/' + total + '…';
       fetch(s.fileUrl, { mode: 'cors' })
         .then(function (r) { return r.ok ? r.arrayBuffer() : Promise.reject(new Error(r.statusText)); })
         .then(function (arrayBuffer) {
           results.push({ sound: s, arrayBuffer: arrayBuffer, filename: filename });
-          fetchOne(index + 1);
+          fetchAudio(index + 1);
         })
         .catch(function (err) {
-          if (downloadStatus) downloadStatus.textContent = 'Failed: ' + (err.message || 'fetch');
-          if (btn) btn.disabled = false;
+          warnings.push('Audio download failed for ' + (s.title || s.id) + ': ' + (err.message || 'fetch'));
+          fetchAudio(index + 1);
         });
     }
 
-    function applyLocalAndSave(results) {
+    function fetchImage(index) {
+      if (index >= pendingImages.length) {
+        applyLocalAndSave(results, imgResults);
+        return;
+      }
+      const s = pendingImages[index];
+      const url = String(s.imageUrl || '').trim();
+      const stepN = pendingAudio.length + index + 1;
+      if (downloadStatus) downloadStatus.textContent = 'Downloading images ' + stepN + '/' + total + '…';
+      fetch(url, { mode: 'cors' })
+        .then(function (r) { return r.ok ? Promise.all([r.arrayBuffer(), r.headers ? r.headers.get('content-type') : '']) : Promise.reject(new Error(r.statusText)); })
+        .then(function (pair) {
+          imgResults.push({ sound: s, arrayBuffer: pair[0], contentType: pair[1] || '' });
+          fetchImage(index + 1);
+        })
+        .catch(function (err) {
+          warnings.push('Image download failed for ' + (s.title || s.id) + ': ' + (err.message || 'fetch'));
+          fetchImage(index + 1);
+        });
+    }
+
+    function applyLocalAndSave(results, imgResults) {
       if (downloadStatus) downloadStatus.textContent = 'Saving into board…';
       const LocalAudio = window.SoundboardLocalAudio;
       let saved = 0;
@@ -2254,10 +2669,18 @@
           results.forEach(function (r) {
             r.sound.fileUrl = 'local:downloaded-' + r.sound.id;
           });
+          imgResults.forEach(function (r) {
+            const ct = r.contentType || guessMimeFromPath(r.sound.imageUrl || '', 'image/jpeg');
+            const b64 = arrayBufferToBase64(r.arrayBuffer);
+            r.sound.imageUrl = 'data:' + ct + ';base64,' + b64;
+          });
           currentBoard.updatedAt = new Date().toISOString();
           saveToStorage();
           if (Audio && Audio.clearCache) Audio.clearCache();
           render();
+          if (warnings.length) {
+            openPortableReport('Download media warnings', 'Some audio/images could not be downloaded (CORS/URL errors).', warnings);
+          }
           saveFilesToDirectory(results);
           return;
         }
@@ -2317,7 +2740,7 @@
       }
     }
 
-    fetchOne(0);
+    fetchAudio(0);
   }
 
   function getSoundIndex(soundId) {
@@ -2390,6 +2813,14 @@
 
   function importBoard(file) {
     if (!file) return;
+    const isZip = /\.zip$/i.test(file.name || '') || String(file.type || '').includes('zip');
+    if (isZip) {
+      importPortableZip(file).catch(function (e) {
+        alert('Invalid ZIP file.');
+        console.warn('zip import failed', e);
+      });
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
       try {
@@ -2525,6 +2956,8 @@
     const addBtn = toolbarEl.querySelector('[data-action="add"]');
     const importBtn = toolbarEl.querySelector('[data-action="import"]');
     const exportBtn = toolbarEl.querySelector('[data-action="export"]');
+    const exportPortableBtn = toolbarEl.querySelector('[data-action="export-portable"]');
+    const portableCheckBtn = toolbarEl.querySelector('[data-action="portable-check"]');
     const clearDataBtn = toolbarEl.querySelector('[data-action="clear-data"]');
     const downloadBtn = toolbarEl.querySelector('[data-action="download-sounds"]');
     const webAddBtn = toolbarEl.querySelector('[data-action="web-add"]');
@@ -2558,8 +2991,8 @@
       function processDroppedFiles(e) {
         const files = e.dataTransfer && e.dataTransfer.files ? Array.from(e.dataTransfer.files) : [];
         if (!files.length) return;
-        const file = files.find((f) => /\.json$/i.test(f.name || '')) || files[0];
-        if (!file || !/\.json$/i.test(file.name || '')) {
+        const file = files.find((f) => /\.(json|zip)$/i.test(f.name || '')) || files[0];
+        if (!file || !/\.(json|zip)$/i.test(file.name || '')) {
           if (downloadStatus) {
             downloadStatus.textContent = t('status.invalidImportFile');
             setTimeout(function () {
@@ -2621,8 +3054,20 @@
       });
     }
     if (exportBtn) exportBtn.addEventListener('click', exportBoard);
+    if (exportPortableBtn) exportPortableBtn.addEventListener('click', function () {
+      exportPortableZip().catch(function (e) {
+        alert('Portable export failed.');
+        console.warn('portable export failed', e);
+      });
+    });
+    if (portableCheckBtn) portableCheckBtn.addEventListener('click', function () {
+      runPortableReadinessCheck().catch(function (e) {
+        alert('Portable readiness check failed.');
+        console.warn('portable check failed', e);
+      });
+    });
     if (clearDataBtn) clearDataBtn.addEventListener('click', clearAllDataAndReset);
-    if (downloadBtn) downloadBtn.addEventListener('click', downloadAllSounds);
+    if (downloadBtn) downloadBtn.addEventListener('click', downloadAllMedia);
     if (webAddBtn) webAddBtn.addEventListener('click', addFromWebUrl);
     if (settingsBtn) settingsBtn.addEventListener('click', openSettingsScreen);
     if (reorderBtn) reorderBtn.addEventListener('click', () => setReorderMode(!reorderMode));
@@ -2956,12 +3401,21 @@
 
   function init() {
     initI18n();
-    initHeaderCollapse();
+    initHeaderMenu();
     favouriteStripRows = loadFavouriteRows();
     recentStripRows = loadRecentRows();
     initToolbar();
     initModal();
     initKeyboard();
+    if (portableReportCloseBtn) portableReportCloseBtn.addEventListener('click', closePortableReport);
+    if (portableReportCopyBtn) portableReportCopyBtn.addEventListener('click', function () { copyPortableReportToClipboard(); });
+    if (portableReportEl) {
+      portableReportEl.addEventListener('click', function (e) {
+        if (e.target && e.target.classList && e.target.classList.contains('portable-report__backdrop')) {
+          closePortableReport();
+        }
+      });
+    }
     loadInitialBoard();
   }
 

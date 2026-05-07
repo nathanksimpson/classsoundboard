@@ -4,18 +4,38 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Soundboard</title>
-  <link rel="stylesheet" href="styles.css?v=20260506-6">
+  <link rel="stylesheet" href="styles.css?v=20260506-8">
 </head>
 <body>
   <header class="header">
     <div class="header__toprow">
       <h1 id="board-name" class="header__title" title="Click to change board name">Soundboard</h1>
-      <button type="button" id="header-toggle" class="btn btn--secondary header__toggle" aria-pressed="false" aria-controls="toolbar global-volume-wrap">
-        ▾ More
-      </button>
+      <div class="header__menu-wrap">
+        <button type="button" id="header-toggle" class="btn btn--secondary header__toggle header__toggle--gear" aria-expanded="false" aria-controls="header-popout" aria-label="Open settings" title="Open settings">
+          ⚙
+        </button>
+      </div>
     </div>
-    <p class="header__hint" data-i18n="header.hint">Tip: click the board name to rename it.</p>
-    <div id="toolbar" class="toolbar">
+    <div class="header__quick">
+      <div class="search" role="search" aria-label="Search sounds">
+        <input type="search" id="search-input" class="search__input" placeholder="Search (title or category)…" aria-label="Search sounds by title or category" data-i18n-placeholder="search.placeholder">
+        <button type="button" id="search-clear" class="search__clear" aria-label="Clear search" title="Clear search" data-i18n="search.clear">Clear</button>
+        <span class="search__count" id="search-count" aria-live="polite"></span>
+      </div>
+      <div class="header__global-volume" id="global-volume-wrap" title="Master volume">
+        <label class="global-volume__label"><span id="global-volume-label">Volume 100%</span></label>
+        <input type="range" id="global-volume" class="global-volume__slider" min="0" max="100" value="100">
+      </div>
+    </div>
+    <div id="header-popout" class="header__popout" hidden>
+      <div class="header__popout-backdrop"></div>
+      <section class="header__popout-panel" role="dialog" aria-modal="true" aria-label="Settings menu">
+        <header class="header__popout-header">
+          <h2 class="header__popout-title">Settings</h2>
+          <button type="button" id="header-popout-close" class="header__popout-close" aria-label="Close settings">✕</button>
+        </header>
+        <p class="header__hint" data-i18n="header.hint">Tip: click the board name to rename it.</p>
+        <div id="toolbar" class="toolbar">
       <div class="toolbar__group toolbar__group--create-edit" aria-label="Create and edit tools">
         <span class="toolbar__group-label" data-i18n="toolbar.group.create">Create/Edit</span>
         <button type="button" class="btn btn--primary" data-action="add" data-i18n="toolbar.add">Add Sound</button>
@@ -27,8 +47,10 @@
 
       <div class="toolbar__group toolbar__group--board-file" aria-label="Board file tools">
         <span class="toolbar__group-label" data-i18n="toolbar.group.board">Board File</span>
-        <input type="file" id="import-input" accept=".json" hidden>
+        <input type="file" id="import-input" accept=".json,.zip,application/zip" hidden>
         <button type="button" class="btn btn--secondary" data-action="export" data-i18n="toolbar.export">Export Board</button>
+        <button type="button" class="btn btn--secondary" data-action="export-portable" data-i18n="toolbar.exportPortable" data-i18n-title="toolbar.exportPortableTitle" title="Export a .zip with board + audio + images (offline portable)">Export Portable ZIP</button>
+        <button type="button" class="btn btn--secondary" data-action="portable-check" data-i18n="toolbar.portableCheck" data-i18n-title="toolbar.portableCheckTitle" title="Check if your board is ready for portable ZIP (offline) export">Portable readiness check</button>
         <button type="button" class="btn btn--danger" data-action="clear-data" data-i18n="toolbar.clearData" data-i18n-title="toolbar.clearDataTitle" title="Clear all saved board/app data and reset to defaults">
           Clear All Data
         </button>
@@ -39,7 +61,7 @@
 
       <div class="toolbar__group toolbar__group--audio-tools" aria-label="Audio tools">
         <span class="toolbar__group-label" data-i18n="toolbar.group.audio">Audio Tools</span>
-        <button type="button" class="btn btn--secondary" data-action="download-sounds" title="Download each sound, save to a folder (or into the app), then update the board to use local copies" data-i18n="toolbar.downloadAll" data-i18n-title="toolbar.downloadAllTitle">Download all sounds</button>
+        <button type="button" class="btn btn--secondary" data-action="download-sounds" title="Download audio + images, save into the app, and update the board to use local copies" data-i18n="toolbar.downloadMedia" data-i18n-title="toolbar.downloadMediaTitle">Download media</button>
         <label class="btn btn--secondary auto-level" title="Automatically level sound volumes">
           <input type="checkbox" id="auto-level-toggle" class="auto-level__check" checked>
           <span class="auto-level__label" data-i18n="toolbar.autoLevel">Auto level</span>
@@ -49,11 +71,6 @@
 
       <div class="toolbar__group toolbar__group--search" aria-label="Search tools">
         <span class="toolbar__group-label" data-i18n="toolbar.group.search">Search</span>
-        <div class="search" role="search" aria-label="Search sounds">
-          <input type="search" id="search-input" class="search__input" placeholder="Search (title or category)…" aria-label="Search sounds by title or category" data-i18n-placeholder="search.placeholder">
-          <button type="button" id="search-clear" class="search__clear" aria-label="Clear search" title="Clear search" data-i18n="search.clear">Clear</button>
-          <span class="search__count" id="search-count" aria-live="polite"></span>
-        </div>
         <button type="button" class="btn btn--secondary" data-action="hotkey-only-toggle" title="Show only sounds that have a hotkey (Shift+H)">Hotkeys only</button>
       </div>
 
@@ -68,11 +85,9 @@
         </label>
       </div>
 
-      <span class="toolbar__status" id="download-status" aria-live="polite"></span>
-    </div>
-    <div class="header__global-volume" id="global-volume-wrap" title="Master volume">
-      <label class="global-volume__label"><span id="global-volume-label">Volume 100%</span></label>
-      <input type="range" id="global-volume" class="global-volume__slider" min="0" max="100" value="100">
+          <span class="toolbar__status" id="download-status" aria-live="polite"></span>
+        </div>
+      </section>
     </div>
   </header>
 
@@ -184,6 +199,21 @@
     </div>
   </section>
 
+  <section id="portable-report" class="portable-report" role="dialog" aria-modal="true" aria-labelledby="portable-report-title" hidden aria-hidden="true">
+    <div class="portable-report__backdrop"></div>
+    <div class="portable-report__panel">
+      <header class="portable-report__header">
+        <h2 id="portable-report-title" class="portable-report__title">Portable export/import report</h2>
+        <div class="portable-report__actions">
+          <button type="button" id="portable-report-copy" class="btn btn--secondary">Copy warnings</button>
+          <button type="button" id="portable-report-close" class="btn btn--secondary">Close</button>
+        </div>
+      </header>
+      <p id="portable-report-summary" class="portable-report__summary"></p>
+      <ul id="portable-report-list" class="portable-report__list"></ul>
+    </div>
+  </section>
+
   <section id="settings-screen" class="settings-screen" role="dialog" aria-modal="true" aria-labelledby="settings-screen-title" hidden aria-hidden="true">
     <div class="settings-screen__backdrop"></div>
     <div class="settings-screen__panel">
@@ -288,11 +318,11 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" crossorigin="anonymous"></script>
   <datalist id="category-options"></datalist>
-  <script src="storage.js?v=20260506-6"></script>
-  <script src="local-audio.js?v=20260506-6"></script>
-  <script src="audio-engine.js?v=20260506-6"></script>
-  <script src="board-manager.js?v=20260506-6"></script>
-  <script src="ui-renderer.js?v=20260506-6"></script>
-  <script src="soundboard.js?v=20260506-6"></script>
+  <script src="storage.js?v=20260506-8"></script>
+  <script src="local-audio.js?v=20260506-8"></script>
+  <script src="audio-engine.js?v=20260506-8"></script>
+  <script src="board-manager.js?v=20260506-8"></script>
+  <script src="ui-renderer.js?v=20260506-8"></script>
+  <script src="soundboard.js?v=20260506-8"></script>
 </body>
 </html>

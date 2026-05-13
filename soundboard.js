@@ -1467,6 +1467,16 @@
   }
 
   function loadInitialBoard() {
+    // Diagnostics so we can tell whether persistence is actually working on
+    // this device. Visible in DevTools Console.
+    try {
+      const lsRaw = localStorage.getItem('soundboard-board');
+      const lsLocation = localStorage.getItem('soundboard-board-location');
+      console.info('[soundboard] load: localStorage entry present?', !!lsRaw, 'size=', lsRaw ? lsRaw.length : 0, 'location=', lsLocation);
+    } catch (e) {
+      console.warn('[soundboard] load: localStorage probe failed', e);
+    }
+
     // Prefer the freshest of localStorage and IndexedDB (compares updatedAt).
     // Falls through to sample board only when both stores are empty/invalid.
     const latestPromise = Storage && Storage.loadBoardLatest
@@ -1475,12 +1485,28 @@
 
     latestPromise.then((saved) => {
       if (saved && Board.validateBoard(saved).ok) {
+        const soundCount = Array.isArray(saved.sounds) ? saved.sounds.length : 0;
+        console.info('[soundboard] load: restored saved board (' + soundCount + ' sounds, updatedAt=' + (saved.updatedAt || 'n/a') + ')');
+        if (downloadStatus) {
+          downloadStatus.textContent = 'Loaded saved board (' + soundCount + ' sound' + (soundCount === 1 ? '' : 's') + ').';
+          setTimeout(function () {
+            if (downloadStatus && downloadStatus.textContent && downloadStatus.textContent.startsWith('Loaded saved board')) {
+              downloadStatus.textContent = '';
+            }
+          }, 3000);
+        }
         setBoard(Board.normalizeBoard(saved));
         return;
       }
+      if (saved) {
+        const validation = Board.validateBoard(saved);
+        console.warn('[soundboard] load: saved board failed validation', validation && validation.error);
+      } else {
+        console.info('[soundboard] load: no saved board found in localStorage or IndexedDB; loading sample.');
+      }
       loadSampleBoardOrEmpty();
     }).catch((err) => {
-      console.warn('soundboard: loadBoardLatest failed', err);
+      console.warn('[soundboard] load: loadBoardLatest failed', err);
       loadSampleBoardOrEmpty();
     });
   }
@@ -1920,8 +1946,11 @@
     // cross-device restore retains quick-access state.
     syncQuickAccessToBoard();
     currentBoard.updatedAt = new Date().toISOString();
+    const soundCount = Array.isArray(currentBoard.sounds) ? currentBoard.sounds.length : 0;
+    console.info('[soundboard] save: starting (sounds=' + soundCount + ', updatedAt=' + currentBoard.updatedAt + ')');
     lastSavePromise = Promise.resolve(Storage.saveBoard(currentBoard))
       .then((location) => {
+        console.info('[soundboard] save: success -> ' + location);
         if (location === 'idb' && downloadStatus) {
           // Friendly note when we transition into IDB (typically because the
           // board has grown beyond the localStorage quota).
@@ -1936,7 +1965,7 @@
         return location;
       })
       .catch((err) => {
-        console.warn('soundboard: saveBoard failed', err);
+        console.warn('[soundboard] save: FAILED', err);
         if (downloadStatus) {
           downloadStatus.textContent = 'Save failed. Storage may be full or blocked.';
           setTimeout(function () {

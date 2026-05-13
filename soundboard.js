@@ -1163,12 +1163,31 @@
     return { favourites, recents };
   }
 
+  /**
+   * Mirror the live favouriteIds/recentIds onto currentBoard.quickAccess so that
+   * any consumer reading the board (saveToStorage, exportPortableZip, etc.)
+   * sees the latest state — not the snapshot from the previous save.
+   */
+  function syncQuickAccessToBoard() {
+    if (!currentBoard || typeof currentBoard !== 'object') return;
+    try {
+      currentBoard.quickAccess = {
+        favourites: Array.from(favouriteIds || []).map((id) => String(id)),
+        recents: (recentIds || []).map((id) => String(id))
+      };
+    } catch (err) {
+      console.warn('soundboard: syncQuickAccessToBoard failed', err);
+    }
+  }
+
   function toggleFavourite(sound) {
     if (!sound || !sound.id) return;
     const id = String(sound.id);
     if (favouriteIds.has(id)) favouriteIds.delete(id);
     else favouriteIds.add(id);
     saveFavourites();
+    syncQuickAccessToBoard();
+    saveToStorage();
     render();
   }
 
@@ -1179,6 +1198,8 @@
     ordered.splice(toIndex, 0, moved);
     favouriteIds = new Set(ordered);
     saveFavourites();
+    syncQuickAccessToBoard();
+    saveToStorage();
     render();
   }
 
@@ -1264,6 +1285,8 @@
     if (!id) return;
     recentIds = [id].concat((recentIds || []).filter((x) => x !== id)).slice(0, MAX_RECENT_SOUNDS);
     saveRecents();
+    syncQuickAccessToBoard();
+    saveToStorage();
   }
 
   function renderQuickAccess(filteredSounds, hotkeyCounts) {
@@ -1895,14 +1918,7 @@
     }
     // Embed favourites/recents in the board itself so portable ZIP and
     // cross-device restore retains quick-access state.
-    try {
-      currentBoard.quickAccess = {
-        favourites: Array.from(favouriteIds || []).map((id) => String(id)),
-        recents: (recentIds || []).map((id) => String(id))
-      };
-    } catch (err) {
-      console.warn('soundboard: quickAccess snapshot failed', err);
-    }
+    syncQuickAccessToBoard();
     currentBoard.updatedAt = new Date().toISOString();
     lastSavePromise = Promise.resolve(Storage.saveBoard(currentBoard))
       .then((location) => {
@@ -2757,6 +2773,7 @@
 
   function exportBoard() {
     if (!currentBoard) return;
+    syncQuickAccessToBoard();
     const json = JSON.stringify(Board.normalizeBoard(currentBoard), null, 2);
     const blob = new Blob([json], { type: 'application/json' });
     const name = (currentBoard.name || 'board').replace(/[^a-z0-9-_]/gi, '-') + '.json';
@@ -2834,6 +2851,11 @@
     }
     const LocalAudio = window.SoundboardLocalAudio;
     const canReadLocalAudio = !!(LocalAudio && LocalAudio.getBlob);
+
+    // Ensure favourites/recents are written into the board snapshot BEFORE
+    // we serialize it, otherwise we'd capture the stale quickAccess from the
+    // last save (e.g. if the user just toggled a favourite).
+    syncQuickAccessToBoard();
 
     const zip = new window.JSZip();
     const normalized = Board.normalizeBoard(currentBoard);

@@ -543,6 +543,22 @@
     return QUICK_ACCESS_COLLAPSED_KEY_PREFIX + boardId;
   }
 
+  function readJsonFromLocalStorage(key, fallback) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return fallback;
+      return JSON.parse(raw);
+    } catch (_) {
+      return fallback;
+    }
+  }
+
+  function writeJsonToLocalStorage(key, value) {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch (_) {}
+  }
+
   function loadFavourites() {
     try {
       const raw = localStorage.getItem(getFavouritesStorageKey());
@@ -2410,7 +2426,16 @@
       }
     }
 
+    // Persist quick-access state (favourites/recents + UI prefs) in portable package.
+    const boardId = String(portable && portable.id ? portable.id : 'default');
     zip.file('board.json', JSON.stringify(portable, null, 2));
+    zip.file('state.json', JSON.stringify({
+      favourites: readJsonFromLocalStorage(FAVOURITES_KEY_PREFIX + boardId, []),
+      recents: readJsonFromLocalStorage(RECENTS_KEY_PREFIX + boardId, []),
+      quickAccessCollapsed: readJsonFromLocalStorage(QUICK_ACCESS_COLLAPSED_KEY_PREFIX + boardId, { recents: false, favourites: false }),
+      favouritesRows: readJsonFromLocalStorage(FAVOURITES_ROWS_KEY, 1),
+      recentsRows: readJsonFromLocalStorage(RECENTS_ROWS_KEY, 1)
+    }, null, 2));
     zip.file('manifest.json', JSON.stringify({
       type: 'soundboard-portable',
       schemaVersion: 1,
@@ -2467,6 +2492,32 @@
       return;
     }
     const board = Board.normalizeBoard(parsed);
+
+    // Restore quick-access state if present.
+    const stateFile = zip.file('state.json');
+    if (stateFile) {
+      try {
+        const stateText = await stateFile.async('text');
+        const st = JSON.parse(stateText || '{}');
+        const boardId = String(board && board.id ? board.id : 'default');
+        if (Array.isArray(st.favourites)) writeJsonToLocalStorage(FAVOURITES_KEY_PREFIX + boardId, st.favourites.map((x) => String(x)));
+        if (Array.isArray(st.recents)) writeJsonToLocalStorage(RECENTS_KEY_PREFIX + boardId, st.recents.map((x) => String(x)));
+        if (st.quickAccessCollapsed && typeof st.quickAccessCollapsed === 'object') {
+          writeJsonToLocalStorage(QUICK_ACCESS_COLLAPSED_KEY_PREFIX + boardId, {
+            recents: !!st.quickAccessCollapsed.recents,
+            favourites: !!st.quickAccessCollapsed.favourites
+          });
+        }
+        if (st.favouritesRows != null) {
+          try { localStorage.setItem(FAVOURITES_ROWS_KEY, String(st.favouritesRows)); } catch (_) {}
+        }
+        if (st.recentsRows != null) {
+          try { localStorage.setItem(RECENTS_ROWS_KEY, String(st.recentsRows)); } catch (_) {}
+        }
+      } catch (e) {
+        console.warn('state.json restore failed', e);
+      }
+    }
     const sounds = Array.isArray(board.sounds) ? board.sounds : [];
     const warnings = [];
     let i = 0;

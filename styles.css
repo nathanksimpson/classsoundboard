@@ -397,6 +397,14 @@ body.body--overlay-open {
   color: var(--text-muted);
 }
 
+.toolbar__status--block {
+  display: block;
+  margin: 0.25rem 0 0;
+  align-self: stretch;
+  font-size: 0.8rem;
+  opacity: 0.8;
+}
+
 .header__global-volume {
   margin-top: 10px;
   display: flex;

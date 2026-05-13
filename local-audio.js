@@ -3,14 +3,14 @@
  * Enables "add my own sound" by file upload; blobs persist across reloads.
  */
 
-const DB_NAME = 'soundboard-audio';
+const AUDIO_DB_NAME = 'soundboard-audio';
 const STORE_NAME = 'blobs';
 let dbPromise = null;
 
 function openDb() {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
+    const req = indexedDB.open(AUDIO_DB_NAME, 1);
     req.onerror = () => reject(req.error);
     req.onsuccess = () => resolve(req.result);
     req.onupgradeneeded = (e) => {

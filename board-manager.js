@@ -48,17 +48,41 @@ function normalizeSound(s) {
   };
 }
 
+// Reserved top-level fields that have explicit normalization rules below.
+// Any other top-level keys on the input board are preserved as-is so that
+// forward-compatible additions (e.g. quickAccess) survive normalize().
+const RESERVED_BOARD_KEYS = new Set([
+  'schemaVersion',
+  'id',
+  'name',
+  'description',
+  'createdAt',
+  'updatedAt',
+  'sounds'
+]);
+
 function normalizeBoard(board) {
-  const sounds = (board.sounds || []).map(normalizeSound);
-  return {
+  const src = board && typeof board === 'object' ? board : {};
+  const sounds = (src.sounds || []).map(normalizeSound);
+  const normalized = {
     schemaVersion: 1,
-    id: String(board.id ?? 'board-1').trim(),
-    name: String(board.name ?? 'Untitled Board').trim(),
-    description: String(board.description ?? '').trim(),
-    createdAt: board.createdAt ?? new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    id: String(src.id ?? 'board-1').trim(),
+    name: String(src.name ?? 'Untitled Board').trim(),
+    description: String(src.description ?? '').trim(),
+    createdAt: src.createdAt ?? new Date().toISOString(),
+    // Preserve updatedAt from the source. The saver owns timestamp updates so
+    // that load/normalize round-trips do not artificially refresh the value
+    // (which would break freshness comparisons between localStorage and IDB).
+    updatedAt: src.updatedAt ?? src.createdAt ?? new Date().toISOString(),
     sounds
   };
+  // Carry forward unknown / forward-compatible top-level fields (e.g. quickAccess).
+  Object.keys(src).forEach((key) => {
+    if (!RESERVED_BOARD_KEYS.has(key)) {
+      normalized[key] = src[key];
+    }
+  });
+  return normalized;
 }
 
 function generateId() {

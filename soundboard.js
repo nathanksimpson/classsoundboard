@@ -25,6 +25,7 @@
   const modalError = document.getElementById('modal-error');
   const boardNameEl = document.getElementById('board-name');
   const downloadStatus = document.getElementById('download-status');
+  const storageInfoEl = document.getElementById('storage-info');
   const globalVolumeEl = document.getElementById('global-volume');
   const globalVolumeLabel = document.getElementById('global-volume-label');
   const durationHint = document.getElementById('duration-hint');
@@ -586,16 +587,23 @@
   }
 
   function applyQuickAccessFromBoard(board) {
+    const qa = board && typeof board === 'object' ? board.quickAccess : null;
+    if (!qa) return;
     try {
-      const qa = board && typeof board === 'object' ? board.quickAccess : null;
-      const favs = qa && Array.isArray(qa.favourites) ? qa.favourites.map((id) => String(id)) : null;
-      const recs = qa && Array.isArray(qa.recents) ? qa.recents.map((id) => String(id)) : null;
-      if (favs) favouriteIds = new Set(favs);
-      if (recs) recentIds = recs;
-      // Keep legacy localStorage mirrors so older logic/UI continues to work.
-      if (favs) saveFavourites();
-      if (recs) saveRecents();
-    } catch (_) {}
+      const favs = Array.isArray(qa.favourites) ? qa.favourites.map((id) => String(id)) : null;
+      const recs = Array.isArray(qa.recents) ? qa.recents.map((id) => String(id)) : null;
+      if (favs) {
+        favouriteIds = new Set(favs);
+        // Mirror to legacy localStorage so other code paths see the same state.
+        saveFavourites();
+      }
+      if (recs) {
+        recentIds = recs;
+        saveRecents();
+      }
+    } catch (err) {
+      console.warn('soundboard: applyQuickAccessFromBoard failed', err);
+    }
   }
 
   function loadQuickAccessCollapsedState() {
@@ -1436,49 +1444,25 @@
   }
 
   function loadInitialBoard() {
-    const saved = Storage && Storage.loadBoard ? Storage.loadBoard() : null;
-    if (saved && Board.validateBoard(saved).ok) {
-      setBoard(Board.normalizeBoard(saved));
-      return;
-    }
+    // Prefer the freshest of localStorage and IndexedDB (compares updatedAt).
+    // Falls through to sample board only when both stores are empty/invalid.
+    const latestPromise = Storage && Storage.loadBoardLatest
+      ? Storage.loadBoardLatest()
+      : Promise.resolve(Storage && Storage.loadBoard ? Storage.loadBoard() : null);
 
-    // If the board was saved to IndexedDB (e.g. localStorage quota exceeded),
-    // we must load it asynchronously; otherwise refresh looks like a "reset".
-    // Also: try IndexedDB even if the location flag is missing (older versions / interrupted saves).
-    try {
-      const location = Storage && Storage.getBoardLocation ? Storage.getBoardLocation() : 'local';
-      if ((location === 'idb' || location === 'local') && Storage && Storage.loadBoardAsync) {
-        Storage.loadBoardAsync().then((idbBoard) => {
-          if (idbBoard && Board.validateBoard(idbBoard).ok) {
-            setBoard(Board.normalizeBoard(idbBoard));
-            return;
-          }
-          // fall through to sample fetch
-          const url = getBoardJsonPath();
-          fetch(url)
-            .then((r) => (r.ok ? r.json() : Promise.reject(new Error('Failed to load board'))))
-            .then((data) => {
-              const result = Board.validateBoard(data);
-              if (!result.ok) throw new Error(result.error);
-              setBoard(Board.normalizeBoard(data));
-            })
-            .catch((err) => {
-              console.warn('soundboard: load board failed', err);
-              setBoard({
-                schemaVersion: 1,
-                id: 'default',
-                name: 'My Soundboard',
-                description: '',
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-                sounds: []
-              });
-            });
-        }).catch(() => {});
+    latestPromise.then((saved) => {
+      if (saved && Board.validateBoard(saved).ok) {
+        setBoard(Board.normalizeBoard(saved));
         return;
       }
-    } catch (_) {}
+      loadSampleBoardOrEmpty();
+    }).catch((err) => {
+      console.warn('soundboard: loadBoardLatest failed', err);
+      loadSampleBoardOrEmpty();
+    });
+  }
 
+  function loadSampleBoardOrEmpty() {
     const url = getBoardJsonPath();
     fetch(url)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error('Failed to load board'))))
@@ -1501,6 +1485,111 @@
       });
   }
 
+  // Map<localImageId, objectUrl> populated as IDB resolution completes.
+  const resolvedImageUrls = new Map();
+
+  /**
+   * If the URL is a data:image URL, store the bytes in IndexedDB and return
+   * a `local-image:<id>` reference. Otherwise return the URL unchanged.
+   * Falls back to returning the data URL if IndexedDB is unavailable.
+   */
+  function internImageUrl(url) {
+    const LocalImages = window.SoundboardLocalImages;
+    if (typeof url !== 'string' || !url.startsWith('data:image')) return Promise.resolve(url);
+    if (!LocalImages || !LocalImages.putDataUrl) return Promise.resolve(url);
+    return LocalImages.putDataUrl(url).then((id) => {
+      // Warm the resolved-url cache immediately so the next render picks it up.
+      LocalImages.getObjectUrl(id).then((objUrl) => {
+        if (objUrl) resolvedImageUrls.set(id, objUrl);
+      }).catch(() => {});
+      return 'local-image:' + id;
+    }).catch((err) => {
+      console.warn('soundboard: intern image failed; keeping data URL', err);
+      return url;
+    });
+  }
+
+  function isLocalImageRef(url) {
+    return typeof url === 'string' && url.startsWith('local-image:');
+  }
+
+  function localImageIdOf(url) {
+    return isLocalImageRef(url) ? url.slice('local-image:'.length) : '';
+  }
+
+  function resolveImageUrl(url) {
+    if (!url) return '';
+    if (!isLocalImageRef(url)) return url;
+    const id = localImageIdOf(url);
+    return resolvedImageUrls.get(id) || '';
+  }
+
+  // Expose a synchronous resolver so the renderer doesn't need to know about IDB.
+  window.SoundboardImageResolver = {
+    resolve: resolveImageUrl,
+    isLocalImageRef: isLocalImageRef
+  };
+
+  function prewarmLocalImages(sounds) {
+    const LocalImages = window.SoundboardLocalImages;
+    if (!LocalImages || !LocalImages.getObjectUrl) return;
+    const ids = new Set();
+    (Array.isArray(sounds) ? sounds : []).forEach((s) => {
+      if (s && isLocalImageRef(s.imageUrl)) ids.add(localImageIdOf(s.imageUrl));
+    });
+    if (!ids.size) return;
+    let resolved = 0;
+    ids.forEach((id) => {
+      if (resolvedImageUrls.has(id)) { resolved++; return; }
+      LocalImages.getObjectUrl(id).then((url) => {
+        if (url) resolvedImageUrls.set(id, url);
+        resolved++;
+        // Re-render once all have completed so tiles pick up the image URLs.
+        if (resolved >= ids.size) {
+          try { render(); } catch (e) { console.warn('soundboard: render after image prewarm failed', e); }
+        }
+      }).catch((err) => {
+        console.warn('soundboard: local-image resolve failed', id, err);
+        resolved++;
+        if (resolved >= ids.size) {
+          try { render(); } catch (e) { console.warn('soundboard: render after image prewarm failed', e); }
+        }
+      });
+    });
+  }
+
+  /**
+   * One-time migration: any sound with a data:image/... URL is pulled out of
+   * the board JSON and stored as local-image:<id> in IndexedDB. This keeps the
+   * board JSON small enough to fit in localStorage even with many images.
+   * Idempotent (skips sounds already using local-image:).
+   */
+  function migrateInlineImagesToIdb(board) {
+    if (!board || !Array.isArray(board.sounds)) return Promise.resolve(false);
+    const LocalImages = window.SoundboardLocalImages;
+    if (!LocalImages || !LocalImages.putDataUrl) return Promise.resolve(false);
+    const targets = board.sounds.filter((s) => s && typeof s.imageUrl === 'string' && s.imageUrl.startsWith('data:image'));
+    if (!targets.length) return Promise.resolve(false);
+    let migrated = 0;
+    return targets.reduce((p, s) => p.then(() => {
+      return LocalImages.putDataUrl(s.imageUrl).then((newId) => {
+        s.imageUrl = 'local-image:' + newId;
+        migrated++;
+        return LocalImages.getObjectUrl(newId).then((u) => {
+          if (u) resolvedImageUrls.set(newId, u);
+        });
+      }).catch((err) => {
+        console.warn('soundboard: image migration skipped', err);
+      });
+    }), Promise.resolve()).then(() => {
+      if (migrated > 0 && Storage && Storage.setSchemaVersion) {
+        Storage.setSchemaVersion(Storage.SCHEMA_VERSION || 2);
+        saveToStorageNow();
+      }
+      return migrated > 0;
+    });
+  }
+
   function setBoard(board) {
     currentBoard = board;
     if (boardNameEl) {
@@ -1518,12 +1607,27 @@
     pruneQuickAccessState();
     buildHotkeyMap();
     refreshCategorySuggestions();
+    prewarmLocalImages(board.sounds);
     render();
     initBoardTitle();
+    updateStorageInfo();
     if (Audio && board.sounds && board.sounds.length) {
       Audio.preloadSounds(board.sounds);
     }
     runAutoAnalyzeOnLoad();
+    // Background-migrate inline data: images to IDB so the JSON shrinks. We do
+    // this AFTER initial render so the user sees the board immediately.
+    setTimeout(function () {
+      migrateInlineImagesToIdb(board).then(function (migrated) {
+        if (migrated) {
+          // Re-resolve any newly stored local-image: refs and re-render.
+          prewarmLocalImages(board.sounds);
+          render();
+        }
+      }).catch(function (err) {
+        console.warn('soundboard: image migration failed', err);
+      });
+    }, 100);
   }
 
   function shouldAnalyzeSound(sound) {
@@ -1773,19 +1877,104 @@
     openModal(sound);
   }
 
-  function saveToStorage() {
-    if (currentBoard && Storage) {
-      // New portable format: store favourites/recents inside the board so ZIP export/import
-      // (and cross-device restore) retains quick-access state.
-      try {
-        currentBoard.quickAccess = {
-          favourites: Array.from(favouriteIds || []).map((id) => String(id)),
-          recents: (recentIds || []).map((id) => String(id))
-        };
-      } catch (_) {}
-      currentBoard.updatedAt = new Date().toISOString();
-      Storage.saveBoard(currentBoard);
+  // Debounced save: many UI actions trigger saveToStorage() in rapid succession.
+  // We coalesce them into a single persistence write (~300 ms after the last
+  // edit) to avoid repeated JSON.stringify of multi-MB boards and to reduce
+  // the chance of repeatedly tripping the localStorage quota.
+  const SAVE_DEBOUNCE_MS = 300;
+  let savePendingTimer = null;
+  let savePending = false;
+  let lastSavePromise = Promise.resolve();
+
+  function saveToStorageNow() {
+    if (!currentBoard || !Storage) return Promise.resolve();
+    savePending = false;
+    if (savePendingTimer) {
+      clearTimeout(savePendingTimer);
+      savePendingTimer = null;
     }
+    // Embed favourites/recents in the board itself so portable ZIP and
+    // cross-device restore retains quick-access state.
+    try {
+      currentBoard.quickAccess = {
+        favourites: Array.from(favouriteIds || []).map((id) => String(id)),
+        recents: (recentIds || []).map((id) => String(id))
+      };
+    } catch (err) {
+      console.warn('soundboard: quickAccess snapshot failed', err);
+    }
+    currentBoard.updatedAt = new Date().toISOString();
+    lastSavePromise = Promise.resolve(Storage.saveBoard(currentBoard))
+      .then((location) => {
+        if (location === 'idb' && downloadStatus) {
+          // Friendly note when we transition into IDB (typically because the
+          // board has grown beyond the localStorage quota).
+          downloadStatus.textContent = 'Saved to local database.';
+          setTimeout(function () {
+            if (downloadStatus && downloadStatus.textContent === 'Saved to local database.') {
+              downloadStatus.textContent = '';
+            }
+          }, 1800);
+        }
+        updateStorageInfo();
+        return location;
+      })
+      .catch((err) => {
+        console.warn('soundboard: saveBoard failed', err);
+        if (downloadStatus) {
+          downloadStatus.textContent = 'Save failed. Storage may be full or blocked.';
+          setTimeout(function () {
+            if (downloadStatus && downloadStatus.textContent === 'Save failed. Storage may be full or blocked.') {
+              downloadStatus.textContent = '';
+            }
+          }, 4000);
+        }
+      });
+    return lastSavePromise;
+  }
+
+  function updateStorageInfo() {
+    if (!storageInfoEl) return;
+    try {
+      const location = Storage && Storage.getBoardLocation ? Storage.getBoardLocation() : 'local';
+      const soundCount = currentBoard && Array.isArray(currentBoard.sounds) ? currentBoard.sounds.length : 0;
+      const locationLabel = location === 'idb' ? 'IndexedDB' : 'browser storage';
+      storageInfoEl.textContent = 'Saved to ' + locationLabel + ' \u00b7 ' + soundCount + ' sound' + (soundCount === 1 ? '' : 's') + '.';
+    } catch (err) {
+      console.warn('soundboard: updateStorageInfo failed', err);
+    }
+  }
+
+  function saveToStorage() {
+    if (!currentBoard || !Storage) return;
+    savePending = true;
+    if (savePendingTimer) clearTimeout(savePendingTimer);
+    savePendingTimer = setTimeout(function () {
+      savePendingTimer = null;
+      saveToStorageNow();
+    }, SAVE_DEBOUNCE_MS);
+  }
+
+  function flushSaveToStorage() {
+    if (!savePending) return lastSavePromise;
+    return saveToStorageNow();
+  }
+
+  // Make sure the last edit is persisted before the user navigates away.
+  if (typeof window !== 'undefined') {
+    window.addEventListener('beforeunload', function () {
+      if (savePending) {
+        // Synchronous-ish: we still call saveToStorageNow, but Storage.saveBoard
+        // will at least attempt localStorage synchronously (the IDB fallback
+        // promise may not finish before unload — acceptable since it began).
+        try { saveToStorageNow(); } catch (err) { console.warn('soundboard: flush on unload failed', err); }
+      }
+    });
+    window.addEventListener('pagehide', function () {
+      if (savePending) {
+        try { saveToStorageNow(); } catch (err) { console.warn('soundboard: flush on pagehide failed', err); }
+      }
+    });
   }
 
   function refreshCategorySuggestions() {
@@ -1820,7 +2009,7 @@
     recentIds = (recentIds || []).filter((id) => id !== String(sound.id));
     saveFavourites();
     saveRecents();
-    saveToStorage();
+    saveToStorageNow();
     closeModal();
     render();
   }
@@ -2514,10 +2703,11 @@
       if (modalError) modalError.textContent = 'Hotkey "' + hotkey + '" is already used by "' + (conflict.title || 'another sound') + '".';
       return;
     }
+    const rawImageUrl = (modalForm.querySelector('[name="imageUrl"]').value || '').trim();
     if (sound) {
       sound.title = title;
       sound.fileUrl = fileUrl;
-      sound.imageUrl = (modalForm.querySelector('[name="imageUrl"]').value || '').trim();
+      sound.imageUrl = rawImageUrl;
       sound.category = (modalForm.querySelector('[name="category"]').value || '').trim();
       sound.hotkey = hotkey;
       sound.volume = volume;
@@ -2531,7 +2721,7 @@
         id: Board.generateId(),
         title,
         fileUrl,
-        imageUrl: (modalForm.querySelector('[name="imageUrl"]').value || '').trim(),
+        imageUrl: rawImageUrl,
         category: (modalForm.querySelector('[name="category"]').value || '').trim(),
         tags: [],
         volume,
@@ -2546,22 +2736,31 @@
       });
       currentBoard.sounds.push(sound);
     }
-    saveToStorage();
-    buildHotkeyMap();
-    refreshCategorySuggestions();
-    closeModal();
-    render();
+    const finishSave = () => {
+      saveToStorage();
+      buildHotkeyMap();
+      refreshCategorySuggestions();
+      closeModal();
+      render();
+    };
+    // If the user pasted a data: image URL, intern it into IDB so the board JSON
+    // stays small. The intern is async; we still finish the rest of the save now.
+    if (rawImageUrl.startsWith('data:image')) {
+      internImageUrl(rawImageUrl).then((newUrl) => {
+        sound.imageUrl = newUrl;
+        finishSave();
+      }).catch(() => finishSave());
+    } else {
+      finishSave();
+    }
   }
 
   function exportBoard() {
     if (!currentBoard) return;
     const json = JSON.stringify(Board.normalizeBoard(currentBoard), null, 2);
     const blob = new Blob([json], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = (currentBoard.name || 'board').replace(/[^a-z0-9-_]/gi, '-') + '.json';
-    a.click();
-    URL.revokeObjectURL(a.href);
+    const name = (currentBoard.name || 'board').replace(/[^a-z0-9-_]/gi, '-') + '.json';
+    shareOrDownloadBlob(blob, name, 'application/json');
   }
 
   function guessMimeFromPath(path, fallback = 'application/octet-stream') {
@@ -2596,6 +2795,37 @@
     return btoa(binary);
   }
 
+  async function shareOrDownloadBlob(blob, filename, mime) {
+    const name = safeFilenamePart(filename || 'file');
+    const type = String(mime || (blob && blob.type) || 'application/octet-stream');
+    const nav = typeof navigator !== 'undefined' ? navigator : null;
+    const canFile = typeof File === 'function';
+    try {
+      if (nav && typeof nav.canShare === 'function' && typeof nav.share === 'function' && canFile) {
+        const file = new File([blob], name, { type });
+        if (nav.canShare({ files: [file] })) {
+          await nav.share({ files: [file], title: name });
+          return;
+        }
+      }
+    } catch (_) {}
+
+    const a = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    a.href = url;
+    a.download = name;
+    a.rel = 'noopener';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    try {
+      a.click();
+    } finally {
+      a.remove();
+      // Safari/iOS can cancel downloads if we revoke too quickly.
+      setTimeout(function () { try { URL.revokeObjectURL(url); } catch (_) {} }, 15000);
+    }
+  }
+
   async function exportPortableZip() {
     if (!currentBoard) return;
     if (!window.JSZip) {
@@ -2603,10 +2833,7 @@
       return;
     }
     const LocalAudio = window.SoundboardLocalAudio;
-    if (!LocalAudio || !LocalAudio.getBlob) {
-      alert('Portable export requires local storage (IndexedDB) support.');
-      return;
-    }
+    const canReadLocalAudio = !!(LocalAudio && LocalAudio.getBlob);
 
     const zip = new window.JSZip();
     const normalized = Board.normalizeBoard(currentBoard);
@@ -2633,13 +2860,17 @@
         const audioName = safeFilenamePart(id) + '.' + ext;
         const audioPath = 'audio/' + audioName;
         if (fileUrl.startsWith('local:')) {
-          const blobId = fileUrl.slice(6);
-          const buf = await LocalAudio.getBlob(blobId);
-          if (buf) {
-            audioFolder.file(audioName, buf);
-            s.fileUrl = 'zip:' + audioPath;
+          if (!canReadLocalAudio) {
+            warnings.push('Cannot access local audio storage on this device/browser. Sound may not be portable: ' + (s.title || id));
           } else {
-            warnings.push('Missing local audio for ' + id);
+            const blobId = fileUrl.slice(6);
+            const buf = await LocalAudio.getBlob(blobId);
+            if (buf) {
+              audioFolder.file(audioName, buf);
+              s.fileUrl = 'zip:' + audioPath;
+            } else {
+              warnings.push('Missing local audio for ' + id);
+            }
           }
         } else if (fileUrl) {
           const res = await fetch(fileUrl, { mode: 'cors' });
@@ -2658,6 +2889,31 @@
         if (!imageUrl) continue;
         if (imageUrl.startsWith('data:')) continue; // already portable
         if (imageUrl.startsWith('zip:')) continue;
+
+        if (imageUrl.startsWith('local-image:')) {
+          // Bundle the bytes from the IDB image store.
+          const LocalImages = window.SoundboardLocalImages;
+          if (!LocalImages || !LocalImages.getBlob) {
+            warnings.push('Local image storage unavailable for ' + (s.title || s.id));
+            continue;
+          }
+          const localId = imageUrl.slice('local-image:'.length);
+          const rec = await LocalImages.getBlob(localId);
+          if (!rec || !rec.arrayBuffer) {
+            warnings.push('Missing local image for ' + (s.title || s.id));
+            continue;
+          }
+          const mime = String(rec.mime || 'image/jpeg').toLowerCase();
+          const ext = mime.includes('png') ? 'png'
+            : mime.includes('webp') ? 'webp'
+              : mime.includes('gif') ? 'gif'
+                : 'jpg';
+          const imgName = safeFilenamePart(id) + '.' + ext;
+          imagesFolder.file(imgName, rec.arrayBuffer);
+          s.imageUrl = 'zip:images/' + imgName;
+          continue;
+        }
+
         const res = await fetch(imageUrl, { mode: 'cors' });
         if (!res.ok) throw new Error(res.statusText || 'fetch failed');
         const buf = await res.arrayBuffer();
@@ -2683,11 +2939,8 @@
     }, null, 2));
 
     const out = await zip.generateAsync({ type: 'blob' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(out);
-    a.download = safeFilenamePart(portable.name || 'board') + '-portable.zip';
-    a.click();
-    URL.revokeObjectURL(a.href);
+    const name = safeFilenamePart(portable.name || 'board') + '-portable.zip';
+    await shareOrDownloadBlob(out, name, 'application/zip');
 
     if (downloadStatus) downloadStatus.textContent = warnings.length ? ('Portable ZIP exported (with ' + warnings.length + ' warnings).') : 'Portable ZIP exported.';
     if (warnings.length) {
@@ -2768,8 +3021,21 @@
         if (zf) {
           const ab = await zf.async('arraybuffer');
           const mime = guessMimeFromPath(path, 'image/jpeg');
-          const b64 = arrayBufferToBase64(ab);
-          s.imageUrl = 'data:' + mime + ';base64,' + b64;
+          const LocalImages = window.SoundboardLocalImages;
+          if (LocalImages && LocalImages.putBlob) {
+            const newId = LocalImages.generateId();
+            try {
+              await LocalImages.putBlob(newId, ab, mime);
+              s.imageUrl = 'local-image:' + newId;
+            } catch (e) {
+              console.warn('soundboard: ZIP image intern failed; falling back to data URL', e);
+              const b64 = arrayBufferToBase64(ab);
+              s.imageUrl = 'data:' + mime + ';base64,' + b64;
+            }
+          } else {
+            const b64 = arrayBufferToBase64(ab);
+            s.imageUrl = 'data:' + mime + ';base64,' + b64;
+          }
         } else {
           warnings.push('Missing image in zip: ' + path);
         }
@@ -2778,7 +3044,7 @@
 
     setBoard(board);
     // Only persist when audio is persistable; otherwise we would save blob: URLs that break on refresh.
-    if (canPersistAudio) saveToStorage();
+    if (canPersistAudio) saveToStorageNow();
     if (Audio && Audio.clearCache) Audio.clearCache();
     render();
     if (warnings.length) {
@@ -2838,6 +3104,19 @@
         okImage++;
       } else if (imageUrl.startsWith('zip:')) {
         okImage++;
+      } else if (imageUrl.startsWith('local-image:')) {
+        const LocalImages = window.SoundboardLocalImages;
+        if (LocalImages && LocalImages.getBlob) {
+          try {
+            const rec = await LocalImages.getBlob(imageUrl.slice('local-image:'.length));
+            if (rec && rec.arrayBuffer) okImage++;
+            else warnings.push('Missing local image: ' + title);
+          } catch (_) {
+            warnings.push('Failed reading local image: ' + title);
+          }
+        } else {
+          warnings.push('Local image storage unavailable: ' + title);
+        }
       } else {
         needsNetImage++;
       }
@@ -2935,25 +3214,46 @@
     function applyLocalAndSave(results, imgResults) {
       if (downloadStatus) downloadStatus.textContent = 'Saving into board…';
       const LocalAudio = window.SoundboardLocalAudio;
+      const LocalImages = window.SoundboardLocalImages;
       let saved = 0;
       function storeNext() {
         if (saved >= results.length) {
           results.forEach(function (r) {
             r.sound.fileUrl = 'local:downloaded-' + r.sound.id;
           });
-          imgResults.forEach(function (r) {
+          // Store downloaded images in IDB (local-image:) so they don't bloat the
+          // board JSON and trip the localStorage quota.
+          const imageStores = imgResults.map(function (r) {
             const ct = r.contentType || guessMimeFromPath(r.sound.imageUrl || '', 'image/jpeg');
+            if (LocalImages && LocalImages.putBlob) {
+              const newId = LocalImages.generateId();
+              return LocalImages.putBlob(newId, r.arrayBuffer, ct)
+                .then(function () {
+                  r.sound.imageUrl = 'local-image:' + newId;
+                  return LocalImages.getObjectUrl(newId).then(function (objUrl) {
+                    if (objUrl) resolvedImageUrls.set(newId, objUrl);
+                  });
+                })
+                .catch(function (e) {
+                  console.warn('soundboard: image intern failed; falling back to data URL', e);
+                  const b64 = arrayBufferToBase64(r.arrayBuffer);
+                  r.sound.imageUrl = 'data:' + ct + ';base64,' + b64;
+                });
+            }
             const b64 = arrayBufferToBase64(r.arrayBuffer);
             r.sound.imageUrl = 'data:' + ct + ';base64,' + b64;
+            return Promise.resolve();
           });
-          currentBoard.updatedAt = new Date().toISOString();
-          saveToStorage();
-          if (Audio && Audio.clearCache) Audio.clearCache();
-          render();
-          if (warnings.length) {
-            openPortableReport('Download media warnings', 'Some audio/images could not be downloaded (CORS/URL errors).', warnings);
-          }
-          saveFilesToDirectory(results);
+          Promise.all(imageStores).then(function () {
+            currentBoard.updatedAt = new Date().toISOString();
+            saveToStorageNow();
+            if (Audio && Audio.clearCache) Audio.clearCache();
+            render();
+            if (warnings.length) {
+              openPortableReport('Download media warnings', 'Some audio/images could not be downloaded (CORS/URL errors).', warnings);
+            }
+            saveFilesToDirectory(results);
+          });
           return;
         }
         const r = results[saved];
@@ -3103,7 +3403,7 @@
           return;
         }
         setBoard(Board.normalizeBoard(data));
-        saveToStorage();
+        saveToStorageNow();
       } catch (e) {
         alert('Invalid JSON file.');
       }

@@ -16,14 +16,26 @@ function t(key, fallback) {
   return fallback;
 }
 
+function resolveImageUrlForRender(url) {
+  if (!url) return '';
+  const resolver = window.SoundboardImageResolver;
+  if (resolver && typeof resolver.resolve === 'function') {
+    return resolver.resolve(url) || '';
+  }
+  // Renderer should not display unresolved local-image: refs as raw text.
+  if (typeof url === 'string' && url.startsWith('local-image:')) return '';
+  return url;
+}
+
 function renderTile(sound, state, index, reorderMode, renderOptions = {}) {
   const stateClass = state === 'playing' ? 'tile--playing' : state === 'error' ? 'tile--error' : 'tile--idle';
   const reorderClass = reorderMode ? ' tile--reorder' : '';
   const title = escapeText(sound.title);
   const color = sound.color || '#4a9eff';
-  const hasImage = sound.imageUrl && sound.imageUrl.trim();
+  const renderableImage = resolveImageUrlForRender(sound.imageUrl);
+  const hasImage = renderableImage && String(renderableImage).trim();
   const bgStyle = hasImage
-    ? `background-image:url(${escapeText(sound.imageUrl)}); background-size:cover; background-color:${escapeText(color)};`
+    ? `background-image:url(${escapeText(renderableImage)}); background-size:cover; background-color:${escapeText(color)};`
     : `background-color:${escapeText(color)};`;
 
   const el = document.createElement('button');

@@ -585,6 +585,19 @@
     } catch (_) {}
   }
 
+  function applyQuickAccessFromBoard(board) {
+    try {
+      const qa = board && typeof board === 'object' ? board.quickAccess : null;
+      const favs = qa && Array.isArray(qa.favourites) ? qa.favourites.map((id) => String(id)) : null;
+      const recs = qa && Array.isArray(qa.recents) ? qa.recents.map((id) => String(id)) : null;
+      if (favs) favouriteIds = new Set(favs);
+      if (recs) recentIds = recs;
+      // Keep legacy localStorage mirrors so older logic/UI continues to work.
+      if (favs) saveFavourites();
+      if (recs) saveRecents();
+    } catch (_) {}
+  }
+
   function loadQuickAccessCollapsedState() {
     try {
       const raw = localStorage.getItem(getQuickAccessCollapsedStorageKey());
@@ -1498,6 +1511,7 @@
     categoryOrder = loadCategoryOrder();
     favouriteIds = loadFavourites();
     recentIds = loadRecents();
+    applyQuickAccessFromBoard(board);
     quickAccessCollapsed = loadQuickAccessCollapsedState();
     favouriteReorderMode = false;
     reorderMode = false;
@@ -1761,6 +1775,14 @@
 
   function saveToStorage() {
     if (currentBoard && Storage) {
+      // New portable format: store favourites/recents inside the board so ZIP export/import
+      // (and cross-device restore) retains quick-access state.
+      try {
+        currentBoard.quickAccess = {
+          favourites: Array.from(favouriteIds || []).map((id) => String(id)),
+          recents: (recentIds || []).map((id) => String(id))
+        };
+      } catch (_) {}
       currentBoard.updatedAt = new Date().toISOString();
       Storage.saveBoard(currentBoard);
     }

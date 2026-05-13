@@ -2311,12 +2311,30 @@
   function exportBoard() {
     if (!currentBoard) return;
     const json = JSON.stringify(Board.normalizeBoard(currentBoard), null, 2);
+    const filename = (currentBoard.name || 'board').replace(/[^a-z0-9-_]/gi, '-') + '.json';
     const blob = new Blob([json], { type: 'application/json' });
+    shareOrDownloadBlob(blob, filename, 'Soundboard board export');
+  }
+
+  function downloadBlob(blob, filename) {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = (currentBoard.name || 'board').replace(/[^a-z0-9-_]/gi, '-') + '.json';
+    a.download = filename;
     a.click();
     URL.revokeObjectURL(a.href);
+  }
+
+  async function shareOrDownloadBlob(blob, filename, title) {
+    try {
+      const file = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
+      if (navigator && navigator.canShare && navigator.share && navigator.canShare({ files: [file] })) {
+        await navigator.share({ title: title || filename, files: [file] });
+        return;
+      }
+    } catch (_) {
+      // Fall back to download.
+    }
+    downloadBlob(blob, filename);
   }
 
   function guessMimeFromPath(path, fallback = 'application/octet-stream') {
@@ -2444,11 +2462,8 @@
     }, null, 2));
 
     const out = await zip.generateAsync({ type: 'blob' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(out);
-    a.download = safeFilenamePart(portable.name || 'board') + '-portable.zip';
-    a.click();
-    URL.revokeObjectURL(a.href);
+    const zipName = safeFilenamePart(portable.name || 'board') + '-portable.zip';
+    await shareOrDownloadBlob(out, zipName, 'Soundboard portable export');
 
     if (downloadStatus) downloadStatus.textContent = warnings.length ? ('Portable ZIP exported (with ' + warnings.length + ' warnings).') : 'Portable ZIP exported.';
     if (warnings.length) {

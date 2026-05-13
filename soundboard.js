@@ -26,6 +26,10 @@
   const boardNameEl = document.getElementById('board-name');
   const downloadStatus = document.getElementById('download-status');
   const storageInfoEl = document.getElementById('storage-info');
+  const fileModeControlsEl = document.getElementById('file-mode-controls');
+  const fileModeAttachBtn = document.getElementById('file-mode-attach');
+  const fileModeDetachBtn = document.getElementById('file-mode-detach');
+  const fileModeStatusEl = document.getElementById('file-mode-status');
   const globalVolumeEl = document.getElementById('global-volume');
   const globalVolumeLabel = document.getElementById('global-volume-label');
   const durationHint = document.getElementById('duration-hint');
@@ -1466,6 +1470,220 @@
     });
   }
 
+  // ------- File-on-disk mode (File System Access API) -------
+  // On supported browsers (Chrome/Edge desktop) we let the user attach a
+  // portable ZIP file. We then read from it on startup and write to it on
+  // every save, so the user's data survives even if localStorage is wiped.
+
+  let fileModeAttached = false;
+  let fileModeFilename = '';
+  let fileModeWriteTimer = null;
+  let fileModeWriteInFlight = false;
+  let fileModeWritePending = false;
+  const FILE_MODE_WRITE_DEBOUNCE_MS = 1500;
+
+  function isFileModeSupported() {
+    return !!(window.SoundboardFileMode && window.SoundboardFileMode.isSupported && window.SoundboardFileMode.isSupported());
+  }
+
+  function setFileModeStatus(text) {
+    if (fileModeStatusEl) fileModeStatusEl.textContent = text || '';
+  }
+
+  function setFileModeUiState(attached, filename, permission) {
+    fileModeAttached = !!attached;
+    fileModeFilename = filename || '';
+    if (fileModeDetachBtn) fileModeDetachBtn.hidden = !attached;
+    if (fileModeAttachBtn) {
+      fileModeAttachBtn.textContent = attached ? 'Re-link or change file…' : 'Sync to file…';
+    }
+    if (attached) {
+      const permNote = permission === 'granted' ? 'synced' : (permission === 'prompt' ? 'click to re-link' : 'permission needed');
+      setFileModeStatus('File: ' + (filename || '(unnamed)') + ' — ' + permNote);
+    } else if (isFileModeSupported()) {
+      setFileModeStatus('Not synced to a file. Click "Sync to file…" to keep your board in a ZIP on disk.');
+    } else {
+      setFileModeStatus('');
+    }
+  }
+
+  async function refreshFileModeStatus() {
+    if (!isFileModeSupported()) {
+      if (fileModeControlsEl) fileModeControlsEl.hidden = true;
+      setFileModeStatus('');
+      return;
+    }
+    if (fileModeControlsEl) fileModeControlsEl.hidden = false;
+    try {
+      const info = await window.SoundboardFileMode.getAttachmentInfo();
+      setFileModeUiState(info.attached, info.name, info.permission);
+    } catch (err) {
+      console.warn('[soundboard] file-mode: status refresh failed', err);
+      setFileModeUiState(false, '', null);
+    }
+  }
+
+  async function tryLoadFromAttachedFile() {
+    if (!isFileModeSupported()) return null;
+    try {
+      const res = await window.SoundboardFileMode.readAttachedFile();
+      if (!res.ok) {
+        if (res.reason === 'no-handle') return null;
+        if (res.reason === 'no-permission') {
+          // We have a handle but the browser requires a user gesture to grant
+          // permission. Surface UI so the user can re-link with a single click.
+          setFileModeStatus('Attached file needs permission. Click "Re-link" to restore from your ZIP.');
+        } else {
+          console.warn('[soundboard] file-mode: load failed', res.reason);
+        }
+        return null;
+      }
+      // We have a File; import it using the existing portable-zip path.
+      console.info('[soundboard] file-mode: restoring from attached file', res.file && res.file.name);
+      setFileModeStatus('Restoring from ' + (res.file && res.file.name) + '…');
+      await importPortableZip(res.file, { fromFileMode: true });
+      setFileModeUiState(true, res.file && res.file.name, 'granted');
+      return true;
+    } catch (err) {
+      console.warn('[soundboard] file-mode: tryLoadFromAttachedFile threw', err);
+      return null;
+    }
+  }
+
+  function scheduleFileModeWrite() {
+    if (!fileModeAttached || !isFileModeSupported()) return;
+    fileModeWritePending = true;
+    if (fileModeWriteTimer) clearTimeout(fileModeWriteTimer);
+    fileModeWriteTimer = setTimeout(function () {
+      fileModeWriteTimer = null;
+      writeFileModeNow();
+    }, FILE_MODE_WRITE_DEBOUNCE_MS);
+  }
+
+  async function buildPortableZipBlob() {
+    // Reuses the exportPortableZip path's logic in-line. We don't reuse
+    // exportPortableZip() because that triggers a download/share. Instead we
+    // construct the same ZIP and return the Blob for our writer.
+    if (!currentBoard || !window.JSZip) return null;
+    const LocalAudio = window.SoundboardLocalAudio;
+    const LocalImages = window.SoundboardLocalImages;
+    syncQuickAccessToBoard();
+    const zip = new window.JSZip();
+    const normalized = Board.normalizeBoard(currentBoard);
+    const portable = JSON.parse(JSON.stringify(normalized));
+    const audioFolder = zip.folder('audio');
+    const imagesFolder = zip.folder('images');
+
+    for (const s of (portable.sounds || [])) {
+      const id = String(s.id || '');
+      try {
+        const fileUrl = String(s.fileUrl || '');
+        if (fileUrl.startsWith('local:') && LocalAudio && LocalAudio.getBlob) {
+          const blobId = fileUrl.slice(6);
+          const buf = await LocalAudio.getBlob(blobId);
+          if (buf) {
+            const audioName = safeFilenamePart(id) + '.mp3';
+            audioFolder.file(audioName, buf);
+            s.fileUrl = 'zip:audio/' + audioName;
+          }
+        }
+      } catch (err) { console.warn('[soundboard] file-mode: audio pack failed', id, err); }
+      try {
+        const imageUrl = String(s.imageUrl || '').trim();
+        if (imageUrl.startsWith('local-image:') && LocalImages && LocalImages.getBlob) {
+          const rec = await LocalImages.getBlob(imageUrl.slice('local-image:'.length));
+          if (rec && rec.arrayBuffer) {
+            const mime = String(rec.mime || 'image/jpeg').toLowerCase();
+            const ext = mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : 'jpg';
+            const imgName = safeFilenamePart(id) + '.' + ext;
+            imagesFolder.file(imgName, rec.arrayBuffer);
+            s.imageUrl = 'zip:images/' + imgName;
+          }
+        }
+      } catch (err) { console.warn('[soundboard] file-mode: image pack failed', id, err); }
+    }
+    zip.file('board.json', JSON.stringify(portable, null, 2));
+    zip.file('manifest.json', JSON.stringify({
+      type: 'soundboard-portable',
+      schemaVersion: 1,
+      createdAt: new Date().toISOString(),
+      boardName: portable.name || ''
+    }, null, 2));
+    return zip.generateAsync({ type: 'blob' });
+  }
+
+  async function writeFileModeNow() {
+    if (!fileModeAttached || !isFileModeSupported()) return;
+    if (fileModeWriteInFlight) {
+      // Another write is in-flight; mark pending so we'll write again after.
+      fileModeWritePending = true;
+      return;
+    }
+    fileModeWriteInFlight = true;
+    fileModeWritePending = false;
+    try {
+      setFileModeStatus('Saving to file…');
+      const blob = await buildPortableZipBlob();
+      if (!blob) {
+        setFileModeStatus('File save skipped (no board).');
+        return;
+      }
+      const res = await window.SoundboardFileMode.writeAttachedFile(blob);
+      if (res.ok) {
+        const stamp = new Date().toLocaleTimeString();
+        setFileModeStatus('File: ' + (fileModeFilename || 'attached') + ' — saved ' + stamp);
+        console.info('[soundboard] file-mode: write ok at ' + stamp);
+      } else {
+        setFileModeStatus('File save failed (' + (res.reason || 'unknown') + ').');
+        console.warn('[soundboard] file-mode: write failed', res.reason);
+      }
+    } catch (err) {
+      console.warn('[soundboard] file-mode: write threw', err);
+      setFileModeStatus('File save error.');
+    } finally {
+      fileModeWriteInFlight = false;
+      if (fileModeWritePending) scheduleFileModeWrite();
+    }
+  }
+
+  async function onAttachFileClick() {
+    if (!isFileModeSupported()) {
+      alert('"Sync to file" is only available on Chrome/Edge desktop browsers.');
+      return;
+    }
+    // Two-step prompt: open existing or save new.
+    const choice = window.confirm('OK = pick an existing portable ZIP to sync.\nCancel = save current board as a new portable ZIP and sync.');
+    if (choice) {
+      const res = await window.SoundboardFileMode.pickAndAttach();
+      if (!res.ok) {
+        if (res.reason !== 'cancelled') alert('Could not attach file (' + res.reason + ').');
+        return;
+      }
+      setFileModeUiState(true, res.file && res.file.name, 'granted');
+      try {
+        await importPortableZip(res.file, { fromFileMode: true });
+      } catch (err) {
+        console.warn('[soundboard] file-mode: import after attach failed', err);
+      }
+    } else {
+      const blob = await buildPortableZipBlob();
+      if (!blob) { alert('Nothing to save yet.'); return; }
+      const suggested = (currentBoard && currentBoard.name ? currentBoard.name : 'soundboard') + '-portable.zip';
+      const res = await window.SoundboardFileMode.saveAndAttach(blob, suggested);
+      if (!res.ok) {
+        if (res.reason !== 'cancelled') alert('Could not save file (' + res.reason + ').');
+        return;
+      }
+      setFileModeUiState(true, res.handle && res.handle.name, 'granted');
+    }
+  }
+
+  async function onDetachFileClick() {
+    if (!window.confirm('Stop syncing to the attached file? Your local board copy stays put; just the file link is removed.')) return;
+    await window.SoundboardFileMode.detach();
+    setFileModeUiState(false, '', null);
+  }
+
   function loadInitialBoard() {
     // Diagnostics so we can tell whether persistence is actually working on
     // this device. Visible in DevTools Console.
@@ -1477,6 +1695,23 @@
       console.warn('[soundboard] load: localStorage probe failed', e);
     }
 
+    // Show the file-mode controls/status immediately.
+    refreshFileModeStatus();
+
+    // First try file-on-disk mode: if the user has attached a ZIP previously,
+    // it is the source of truth.
+    Promise.resolve(isFileModeSupported() ? tryLoadFromAttachedFile() : null)
+      .then((loadedFromFile) => {
+        if (loadedFromFile) return;
+        loadFromStorageOrSample();
+      })
+      .catch((err) => {
+        console.warn('[soundboard] file-mode: startup load threw', err);
+        loadFromStorageOrSample();
+      });
+  }
+
+  function loadFromStorageOrSample() {
     // Prefer the freshest of localStorage and IndexedDB (compares updatedAt).
     // Falls through to sample board only when both stores are empty/invalid.
     const latestPromise = Storage && Storage.loadBoardLatest
@@ -1948,6 +2183,8 @@
     currentBoard.updatedAt = new Date().toISOString();
     const soundCount = Array.isArray(currentBoard.sounds) ? currentBoard.sounds.length : 0;
     console.info('[soundboard] save: starting (sounds=' + soundCount + ', updatedAt=' + currentBoard.updatedAt + ')');
+    // Also persist to the attached portable ZIP file, if any.
+    scheduleFileModeWrite();
     lastSavePromise = Promise.resolve(Storage.saveBoard(currentBoard))
       .then((location) => {
         console.info('[soundboard] save: success -> ' + location);
@@ -3003,8 +3240,9 @@
     }
   }
 
-  async function importPortableZip(file) {
+  async function importPortableZip(file, options) {
     if (!file) return;
+    const fromFileMode = !!(options && options.fromFileMode);
     if (!window.JSZip) {
       alert('ZIP import not available (JSZip missing).');
       return;
@@ -3095,7 +3333,14 @@
 
     setBoard(board);
     // Only persist when audio is persistable; otherwise we would save blob: URLs that break on refresh.
+    // When we're loading from the attached file (fromFileMode), we still
+    // persist to localStorage/IDB so the in-session save path is consistent.
     if (canPersistAudio) saveToStorageNow();
+    if (fromFileMode) {
+      // Skip writing back to the file we just read (avoid noisy round-trips).
+      fileModeWritePending = false;
+      if (fileModeWriteTimer) { clearTimeout(fileModeWriteTimer); fileModeWriteTimer = null; }
+    }
     if (Audio && Audio.clearCache) Audio.clearCache();
     render();
     if (warnings.length) {
@@ -3692,6 +3937,12 @@
     });
     if (clearDataBtn) clearDataBtn.addEventListener('click', clearAllDataAndReset);
     if (downloadBtn) downloadBtn.addEventListener('click', downloadAllMedia);
+    if (fileModeAttachBtn) fileModeAttachBtn.addEventListener('click', function () {
+      onAttachFileClick().catch((err) => console.warn('[soundboard] file-mode attach failed', err));
+    });
+    if (fileModeDetachBtn) fileModeDetachBtn.addEventListener('click', function () {
+      onDetachFileClick().catch((err) => console.warn('[soundboard] file-mode detach failed', err));
+    });
     if (webAddBtn) webAddBtn.addEventListener('click', addFromWebUrl);
     if (settingsBtn) settingsBtn.addEventListener('click', openSettingsScreen);
     if (reorderBtn) reorderBtn.addEventListener('click', () => setReorderMode(!reorderMode));

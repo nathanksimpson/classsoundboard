@@ -57,6 +57,11 @@
         <button type="button" id="import-dropzone" class="import-dropzone" data-i18n="toolbar.importDropzone" data-i18n-title="toolbar.importDropzoneTitle" title="Drop a .json board file here, or click to choose one">
           Import Sounds (Drag and drop or click)
         </button>
+        <div id="file-mode-controls" class="file-mode-controls" hidden>
+          <button type="button" id="file-mode-attach" class="btn btn--secondary" title="Pick or save a portable ZIP and keep it in sync. Chrome/Edge desktop only.">Sync to file…</button>
+          <button type="button" id="file-mode-detach" class="btn btn--secondary" hidden title="Stop syncing to the attached file.">Stop syncing</button>
+        </div>
+        <p id="file-mode-status" class="toolbar__status toolbar__status--block" aria-live="polite"></p>
         <p id="storage-info" class="toolbar__status toolbar__status--block" aria-live="polite" title="Where your board is currently saved"></p>
       </div>
 
@@ -323,12 +328,13 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" crossorigin="anonymous"></script>
   <datalist id="category-options"></datalist>
-  <script src="storage.js?v=20260513-7"></script>
-  <script src="local-audio.js?v=20260513-7"></script>
-  <script src="local-images.js?v=20260513-7"></script>
-  <script src="audio-engine.js?v=20260513-7"></script>
-  <script src="board-manager.js?v=20260513-7"></script>
-  <script src="ui-renderer.js?v=20260513-7"></script>
-  <script src="soundboard.js?v=20260513-7"></script>
+  <script src="storage.js?v=20260513-8"></script>
+  <script src="local-audio.js?v=20260513-8"></script>
+  <script src="local-images.js?v=20260513-8"></script>
+  <script src="file-mode.js?v=20260513-8"></script>
+  <script src="audio-engine.js?v=20260513-8"></script>
+  <script src="board-manager.js?v=20260513-8"></script>
+  <script src="ui-renderer.js?v=20260513-8"></script>
+  <script src="soundboard.js?v=20260513-8"></script>
 </body>
 </html>

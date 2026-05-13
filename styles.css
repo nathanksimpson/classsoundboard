@@ -405,6 +405,14 @@ body.body--overlay-open {
   opacity: 0.8;
 }
 
+.file-mode-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-self: stretch;
+  margin: 0.4rem 0 0;
+}
+
 .header__global-volume {
   margin-top: 10px;
   display: flex;

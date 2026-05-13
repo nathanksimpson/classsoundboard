@@ -33,6 +33,8 @@
   const searchCountEl = document.getElementById('search-count');
   const autoLevelToggleEl = document.getElementById('auto-level-toggle');
   const quickBarEl = document.getElementById('quick-bar');
+  const themeToggleBtn = toolbarEl && toolbarEl.querySelector('[data-action="theme-toggle"]');
+  const quickThemeBtn = quickBarEl && quickBarEl.querySelector('[data-action="quick-theme"]');
   const settingsScreenEl = document.getElementById('settings-screen');
   const settingsListEl = document.getElementById('settings-list');
   const settingsSearchEl = document.getElementById('settings-search');
@@ -76,8 +78,12 @@
   const CATEGORY_ORDER_KEY_PREFIX = 'soundboard-category-order:';
   const AUTO_LEVEL_KEY = 'soundboard-auto-level';
   const LANGUAGE_KEY = 'soundboard-language';
+  const THEME_KEY = 'soundboard-theme';
   const FAVOURITES_KEY_PREFIX = 'soundboard-favourites:';
   const RECENTS_KEY_PREFIX = 'soundboard-recents:';
+
+  // Allowed values: 'system' (default), 'light', 'dark'
+  let themePreference = 'system';
   const QUICK_ACCESS_COLLAPSED_KEY_PREFIX = 'soundboard-quick-access-collapsed:';
   const FAVOURITES_ROWS_KEY = 'soundboard-favourites-rows';
   const RECENTS_ROWS_KEY = 'soundboard-recents-rows';
@@ -543,22 +549,6 @@
     return QUICK_ACCESS_COLLAPSED_KEY_PREFIX + boardId;
   }
 
-  function readJsonFromLocalStorage(key, fallback) {
-    try {
-      const raw = localStorage.getItem(key);
-      if (!raw) return fallback;
-      return JSON.parse(raw);
-    } catch (_) {
-      return fallback;
-    }
-  }
-
-  function writeJsonToLocalStorage(key, value) {
-    try {
-      localStorage.setItem(key, JSON.stringify(value));
-    } catch (_) {}
-  }
-
   function loadFavourites() {
     try {
       const raw = localStorage.getItem(getFavouritesStorageKey());
@@ -654,6 +644,49 @@
     } catch (_) {}
   }
 
+  function loadThemePreference() {
+    try {
+      const raw = localStorage.getItem(THEME_KEY);
+      if (raw === 'light' || raw === 'dark' || raw === 'system') return raw;
+    } catch (_) {}
+    return 'system';
+  }
+
+  function saveThemePreference(value) {
+    try {
+      localStorage.setItem(THEME_KEY, value);
+    } catch (_) {}
+  }
+
+  function updateThemeButtons() {
+    const label = themePreference === 'system' ? 'Theme: Auto' : themePreference === 'light' ? 'Theme: Light' : 'Theme: Dark';
+    if (themeToggleBtn) {
+      themeToggleBtn.textContent = label;
+      themeToggleBtn.setAttribute('aria-pressed', themePreference === 'system' ? 'false' : 'true');
+      themeToggleBtn.title = 'Theme: Auto / Light / Dark';
+    }
+    if (quickThemeBtn) {
+      quickThemeBtn.textContent = themePreference === 'system' ? 'Auto' : (themePreference === 'light' ? 'Light' : 'Dark');
+      quickThemeBtn.setAttribute('aria-pressed', themePreference === 'system' ? 'false' : 'true');
+    }
+  }
+
+  function applyThemePreference(value) {
+    themePreference = (value === 'light' || value === 'dark' || value === 'system') ? value : 'system';
+    const root = document && document.documentElement ? document.documentElement : null;
+    if (root) {
+      if (themePreference === 'system') delete root.dataset.theme;
+      else root.dataset.theme = themePreference;
+    }
+    updateThemeButtons();
+  }
+
+  function cycleThemePreference() {
+    const next = themePreference === 'system' ? 'light' : themePreference === 'light' ? 'dark' : 'system';
+    saveThemePreference(next);
+    applyThemePreference(next);
+  }
+
   function pruneQuickAccessState() {
     const ids = new Set((currentBoard && Array.isArray(currentBoard.sounds) ? currentBoard.sounds : []).map((s) => String(s.id)));
     favouriteIds = new Set(Array.from(favouriteIds).filter((id) => ids.has(id)));
@@ -745,14 +778,23 @@
       const upper = trimmed.toUpperCase();
       if (/^F([1-9]|1[0-2])$/.test(upper)) return upper;
       if (keyAliases.has(upper)) return keyAliases.get(upper);
-      const canonicalNames = new Set([
-        'ENTER', 'TAB', 'ESCAPE', 'BACKSPACE', 'DELETE', 'INSERT', 'HOME', 'END', 'PAGEUP', 'PAGEDOWN',
-        'ARROWUP', 'ARROWDOWN', 'ARROWLEFT', 'ARROWRIGHT'
+      const canonicalNames = new Map([
+        ['ENTER', 'Enter'],
+        ['TAB', 'Tab'],
+        ['ESCAPE', 'Escape'],
+        ['BACKSPACE', 'Backspace'],
+        ['DELETE', 'Delete'],
+        ['INSERT', 'Insert'],
+        ['HOME', 'Home'],
+        ['END', 'End'],
+        ['PAGEUP', 'PageUp'],
+        ['PAGEDOWN', 'PageDown'],
+        ['ARROWUP', 'ArrowUp'],
+        ['ARROWDOWN', 'ArrowDown'],
+        ['ARROWLEFT', 'ArrowLeft'],
+        ['ARROWRIGHT', 'ArrowRight']
       ]);
-      if (canonicalNames.has(upper)) {
-        const lower = upper.toLowerCase();
-        return lower.charAt(0).toUpperCase() + lower.slice(1);
-      }
+      if (canonicalNames.has(upper)) return canonicalNames.get(upper);
       return '';
     }
 
@@ -800,17 +842,65 @@
       Right: 'ArrowRight'
     };
 
+    function keyFromCode(code) {
+      const c = String(code || '');
+      if (!c) return '';
+      if (c === 'Space') return 'Space';
+      if (c === 'Tab') return 'Tab';
+      if (c === 'Enter') return 'Enter';
+      if (c === 'Escape') return 'Escape';
+      if (c === 'Backspace') return 'Backspace';
+      if (c === 'Delete') return 'Delete';
+      if (c === 'Insert') return 'Insert';
+      if (c === 'Home') return 'Home';
+      if (c === 'End') return 'End';
+      if (c === 'PageUp') return 'PageUp';
+      if (c === 'PageDown') return 'PageDown';
+      if (c === 'ArrowUp') return 'ArrowUp';
+      if (c === 'ArrowDown') return 'ArrowDown';
+      if (c === 'ArrowLeft') return 'ArrowLeft';
+      if (c === 'ArrowRight') return 'ArrowRight';
+      if (/^Key[A-Z]$/.test(c)) return c.slice(3);
+      if (/^Digit[0-9]$/.test(c)) return c.slice(5);
+      if (/^F([1-9]|1[0-2])$/.test(c)) return c;
+      const punct = {
+        Backquote: '`',
+        Minus: '-',
+        Equal: '=',
+        BracketLeft: '[',
+        BracketRight: ']',
+        Backslash: '\\',
+        IntlBackslash: '\\',
+        Semicolon: ';',
+        Quote: "'",
+        Comma: ',',
+        Period: '.',
+        Slash: '/'
+      };
+      if (punct[c]) return punct[c];
+      return '';
+    }
+
     let key = e.key || '';
+    if (!key) key = keyFromCode(e.code);
     if (!key) return '';
+    // Newer Chromium + some IME layouts report these instead of the actual key.
+    if (key === 'Dead' || key === 'Process' || key === 'Unidentified') {
+      const fallback = keyFromCode(e.code);
+      if (fallback) key = fallback;
+    }
+    // Treat AltGraph as a modifier, not a standalone hotkey key.
+    if (key === 'AltGraph') return '';
     if (keyAlias[key]) key = keyAlias[key];
     if (key.length === 1) {
       if (e.shiftKey && shiftedCharToBase[key]) key = shiftedCharToBase[key];
       if (/^[a-z]$/i.test(key)) key = key.toUpperCase();
     }
 
+    const altGraph = typeof e.getModifierState === 'function' && e.getModifierState('AltGraph');
     const signature = normalizeHotkeyInput(
-      (e.ctrlKey ? 'Ctrl+' : '')
-      + (e.altKey ? 'Alt+' : '')
+      ((e.ctrlKey && !altGraph) ? 'Ctrl+' : '')
+      + ((e.altKey || altGraph) ? 'Alt+' : '')
       + (e.shiftKey ? 'Shift+' : '')
       + (e.metaKey ? 'Meta+' : '')
       + key
@@ -912,28 +1002,92 @@
       sound.imageUrl || '',
       sound.hotkey || ''
     ].join(' ').toLowerCase();
-    row.innerHTML = ''
-      + '<div class="settings-row__top">'
-      + '  <div class="settings-row__name">' + escapeAttr((idx + 1) + '. ' + (sound.title || 'Untitled')) + '</div>'
-      + '  <div class="settings-row__flags">'
-      + '    <label class="settings-row__favorite"><input type="checkbox" data-field="favorite"' + (favouriteIds.has(String(sound.id)) ? ' checked' : '') + '> Favourite</label>'
-      + '    <label class="settings-row__delete"><input type="checkbox" data-field="delete"> Delete</label>'
-      + '  </div>'
-      + '</div>'
-      + '<div class="settings-row__grid">'
-      + '  <label><span class="field__label">Title</span><input class="field__input" data-field="title" type="text" value="' + escapeAttr(sound.title || '') + '"></label>'
-      + '  <label><span class="field__label">Audio URL</span><input class="field__input" data-field="fileUrl" type="text" value="' + escapeAttr(sound.fileUrl || '') + '"></label>'
-      + '  <label><span class="field__label">Image URL</span><input class="field__input" data-field="imageUrl" type="text" value="' + escapeAttr(sound.imageUrl || '') + '"></label>'
-      + '  <label><span class="field__label">Category</span><input class="field__input" data-field="category" type="text" list="category-options" value="' + escapeAttr(sound.category || '') + '"></label>'
-      + '  <label><span class="field__label">Hotkey (press combo, e.g. Q, Shift+., Ctrl+Alt+P)</span><input class="field__input" data-field="hotkey" type="text" value="' + escapeAttr(normalizeHotkeyInput(sound.hotkey || '')) + '"></label>'
-      + '  <label><span class="field__label">Volume %</span><input class="field__input" data-field="volume" type="number" min="0" max="100" step="1" value="' + escapeAttr(Math.round((sound.volume != null ? sound.volume : 1) * 100)) + '"></label>'
-      + '  <label><span class="field__label">Speed</span><input class="field__input" data-field="playbackRate" type="number" min="0.5" max="2" step="0.1" value="' + escapeAttr(sound.playbackRate != null ? sound.playbackRate : 1) + '"></label>'
-      + '  <label><span class="field__label">Start sec</span><input class="field__input" data-field="startSec" type="number" min="0" step="0.01" value="' + escapeAttr(sound.startMs != null ? (sound.startMs / 1000) : '') + '"></label>'
-      + '  <label><span class="field__label">End sec</span><input class="field__input" data-field="endSec" type="number" min="0" step="0.01" value="' + escapeAttr(sound.endMs != null ? (sound.endMs / 1000) : '') + '"></label>'
-      + '  <label class="field--checkbox"><input data-field="loop" type="checkbox"' + (sound.loop ? ' checked' : '') + '><span class="field__label">Loop</span></label>'
-      + '  <label class="field--checkbox"><input data-field="momentary" type="checkbox"' + (sound.momentary ? ' checked' : '') + '><span class="field__label">Momentary</span></label>'
-      + '</div>'
-      + '<p class="settings-row__error" aria-live="polite"></p>';
+
+    function el(tag, className, text) {
+      const n = document.createElement(tag);
+      if (className) n.className = className;
+      if (text != null) n.textContent = String(text);
+      return n;
+    }
+
+    function makeLabeledInput(labelText, field, type, value, attrs = {}) {
+      const label = document.createElement('label');
+      const lab = el('span', 'field__label', labelText);
+      const input = document.createElement('input');
+      input.className = 'field__input';
+      input.type = type;
+      input.dataset.field = field;
+      input.value = value == null ? '' : String(value);
+      Object.keys(attrs).forEach((k) => {
+        const v = attrs[k];
+        if (v == null) return;
+        if (k === 'list') input.setAttribute('list', String(v));
+        else input.setAttribute(k, String(v));
+      });
+      label.appendChild(lab);
+      label.appendChild(input);
+      return label;
+    }
+
+    function makeCheckboxLabel(className, field, checked, text) {
+      const label = document.createElement('label');
+      if (className) label.className = className;
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.dataset.field = field;
+      input.checked = !!checked;
+      label.appendChild(input);
+      label.appendChild(document.createTextNode(' ' + text));
+      return label;
+    }
+
+    const top = el('div', 'settings-row__top');
+    const name = el('div', 'settings-row__name', (idx + 1) + '. ' + (sound.title || 'Untitled'));
+    const flags = el('div', 'settings-row__flags');
+    flags.appendChild(makeCheckboxLabel('settings-row__favorite', 'favorite', favouriteIds.has(String(sound.id)), 'Favourite'));
+    flags.appendChild(makeCheckboxLabel('settings-row__delete', 'delete', false, 'Delete'));
+    top.appendChild(name);
+    top.appendChild(flags);
+
+    const grid = el('div', 'settings-row__grid');
+    grid.appendChild(makeLabeledInput('Title', 'title', 'text', sound.title || ''));
+    grid.appendChild(makeLabeledInput('Audio URL', 'fileUrl', 'text', sound.fileUrl || ''));
+    grid.appendChild(makeLabeledInput('Image URL', 'imageUrl', 'text', sound.imageUrl || ''));
+    grid.appendChild(makeLabeledInput('Category', 'category', 'text', sound.category || '', { list: 'category-options' }));
+    grid.appendChild(makeLabeledInput('Hotkey (press combo, e.g. Q, Shift+., Ctrl+Alt+P)', 'hotkey', 'text', normalizeHotkeyInput(sound.hotkey || '')));
+    grid.appendChild(makeLabeledInput('Volume %', 'volume', 'number', Math.round((sound.volume != null ? sound.volume : 1) * 100), { min: 0, max: 100, step: 1 }));
+    grid.appendChild(makeLabeledInput('Speed', 'playbackRate', 'number', (sound.playbackRate != null ? sound.playbackRate : 1), { min: 0.5, max: 2, step: 0.1 }));
+    grid.appendChild(makeLabeledInput('Start sec', 'startSec', 'number', (sound.startMs != null ? (sound.startMs / 1000) : ''), { min: 0, step: 0.01 }));
+    grid.appendChild(makeLabeledInput('End sec', 'endSec', 'number', (sound.endMs != null ? (sound.endMs / 1000) : ''), { min: 0, step: 0.01 }));
+
+    const loopLabel = document.createElement('label');
+    loopLabel.className = 'field--checkbox';
+    const loopInput = document.createElement('input');
+    loopInput.type = 'checkbox';
+    loopInput.dataset.field = 'loop';
+    loopInput.checked = !!sound.loop;
+    const loopText = el('span', 'field__label', 'Loop');
+    loopLabel.appendChild(loopInput);
+    loopLabel.appendChild(loopText);
+    grid.appendChild(loopLabel);
+
+    const momentaryLabel = document.createElement('label');
+    momentaryLabel.className = 'field--checkbox';
+    const momentaryInput = document.createElement('input');
+    momentaryInput.dataset.field = 'momentary';
+    momentaryInput.type = 'checkbox';
+    momentaryInput.checked = !!sound.momentary;
+    const momentaryText = el('span', 'field__label', 'Momentary');
+    momentaryLabel.appendChild(momentaryInput);
+    momentaryLabel.appendChild(momentaryText);
+    grid.appendChild(momentaryLabel);
+
+    const rowError = el('p', 'settings-row__error');
+    rowError.setAttribute('aria-live', 'polite');
+
+    row.appendChild(top);
+    row.appendChild(grid);
+    row.appendChild(rowError);
     return row;
   }
 
@@ -1507,10 +1661,28 @@
     }
     playingId = sound.id;
     render();
-    Audio.playSound(sound).then((played) => {
+    Audio.playSound(sound).then(async (played) => {
       if (!played) {
         errorIds.add(sound.id);
         if (UI && gridEl) UI.updateTileState(gridEl, sound.id, 'error');
+        if (downloadStatus) {
+          let msg = 'Audio failed to load.';
+          try {
+            const fileUrl = String(sound && sound.fileUrl ? sound.fileUrl : '');
+            if (fileUrl.startsWith('local:')) {
+              const LocalAudio = window.SoundboardLocalAudio;
+              const blobId = fileUrl.slice(6);
+              if (LocalAudio && LocalAudio.getBlob) {
+                const buf = await LocalAudio.getBlob(blobId);
+                if (!buf) msg = 'Audio missing from local storage. Re-import the ZIP (or run “Download all sounds”, then export again).';
+              } else {
+                msg = 'Local audio storage not available in this browser session.';
+              }
+            }
+          } catch (_) {}
+          downloadStatus.textContent = msg;
+          setTimeout(function () { if (downloadStatus) downloadStatus.textContent = ''; }, 4000);
+        }
       }
       if (playingId === sound.id) {
         playingId = null;
@@ -1617,12 +1789,21 @@
     const uploadedHint = document.getElementById('uploaded-audio-hint');
     if (uploadInput) uploadInput.value = '';
     if (modalForm.dataset) delete modalForm.dataset.pendingBlobId;
+    if (modalForm.dataset) delete modalForm.dataset.originalLocalFileUrl;
     if (uploadedHint) uploadedHint.textContent = '';
     if (modalForm) {
-      const isLocal = sound && sound.fileUrl && String(sound.fileUrl).startsWith('local:');
+      const rawFileUrl = sound && sound.fileUrl != null ? String(sound.fileUrl) : '';
+      const trimmedFileUrl = rawFileUrl.trim();
+      const isLocal = !!trimmedFileUrl && trimmedFileUrl.startsWith('local:');
+      // Important: keep local blob id so saving hotkeys/edits doesn't fail with
+      // "Provide an audio URL or upload a file." after ZIP/local import.
+      if (isLocal && modalForm.dataset) {
+        modalForm.dataset.pendingBlobId = trimmedFileUrl.slice(6);
+        modalForm.dataset.originalLocalFileUrl = trimmedFileUrl;
+      }
       modalForm.querySelector('[name="title"]').value = sound ? sound.title : '';
-      modalForm.querySelector('[name="fileUrl"]').value = isLocal ? '' : (sound ? sound.fileUrl : '');
-      if (isLocal && uploadedHint) uploadedHint.textContent = 'Audio: your uploaded file (saved)';
+      modalForm.querySelector('[name="fileUrl"]').value = isLocal ? '' : (sound ? String(sound.fileUrl || '') : '');
+      if (isLocal && uploadedHint) uploadedHint.textContent = 'Audio: saved locally';
       modalForm.querySelector('[name="imageUrl"]').value = sound ? sound.imageUrl || '' : '';
       modalForm.querySelector('[name="category"]').value = sound ? sound.category || '' : '';
       modalForm.querySelector('[name="hotkey"]').value = sound ? normalizeHotkeyInput(sound.hotkey || '') : '';
@@ -2223,7 +2404,11 @@
     const id = modalEl.dataset.soundId;
     const title = (modalForm.querySelector('[name="title"]').value || '').trim();
     const pendingBlobId = modalForm.dataset && modalForm.dataset.pendingBlobId;
-    const fileUrl = pendingBlobId ? ('local:' + pendingBlobId) : (modalForm.querySelector('[name="fileUrl"]').value || '').trim();
+    let fileUrl = pendingBlobId ? ('local:' + pendingBlobId) : (modalForm.querySelector('[name="fileUrl"]').value || '').trim();
+    if (!fileUrl) {
+      const originalLocal = modalForm.dataset && modalForm.dataset.originalLocalFileUrl ? String(modalForm.dataset.originalLocalFileUrl).trim() : '';
+      if (originalLocal.startsWith('local:')) fileUrl = originalLocal;
+    }
     if (!title) {
       if (modalError) modalError.textContent = 'Title is required.';
       return;
@@ -2311,30 +2496,12 @@
   function exportBoard() {
     if (!currentBoard) return;
     const json = JSON.stringify(Board.normalizeBoard(currentBoard), null, 2);
-    const filename = (currentBoard.name || 'board').replace(/[^a-z0-9-_]/gi, '-') + '.json';
     const blob = new Blob([json], { type: 'application/json' });
-    shareOrDownloadBlob(blob, filename, 'Soundboard board export');
-  }
-
-  function downloadBlob(blob, filename) {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = filename;
+    a.download = (currentBoard.name || 'board').replace(/[^a-z0-9-_]/gi, '-') + '.json';
     a.click();
     URL.revokeObjectURL(a.href);
-  }
-
-  async function shareOrDownloadBlob(blob, filename, title) {
-    try {
-      const file = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
-      if (navigator && navigator.canShare && navigator.share && navigator.canShare({ files: [file] })) {
-        await navigator.share({ title: title || filename, files: [file] });
-        return;
-      }
-    } catch (_) {
-      // Fall back to download.
-    }
-    downloadBlob(blob, filename);
   }
 
   function guessMimeFromPath(path, fallback = 'application/octet-stream') {
@@ -2401,12 +2568,15 @@
       // Audio
       try {
         const fileUrl = String(s.fileUrl || '');
-        const audioPath = 'audio/' + safeFilenamePart(id) + '.mp3';
+        const urlExtMatch = fileUrl && !fileUrl.startsWith('local:') ? String(fileUrl).toLowerCase().match(/\.(mp3|wav|ogg|m4a)(\?|#|$)/) : null;
+        const ext = urlExtMatch ? urlExtMatch[1] : 'mp3';
+        const audioName = safeFilenamePart(id) + '.' + ext;
+        const audioPath = 'audio/' + audioName;
         if (fileUrl.startsWith('local:')) {
           const blobId = fileUrl.slice(6);
           const buf = await LocalAudio.getBlob(blobId);
           if (buf) {
-            audioFolder.file(safeFilenamePart(id) + '.mp3', buf);
+            audioFolder.file(audioName, buf);
             s.fileUrl = 'zip:' + audioPath;
           } else {
             warnings.push('Missing local audio for ' + id);
@@ -2415,7 +2585,7 @@
           const res = await fetch(fileUrl, { mode: 'cors' });
           if (!res.ok) throw new Error(res.statusText || 'fetch failed');
           const buf = await res.arrayBuffer();
-          audioFolder.file(safeFilenamePart(id) + '.mp3', buf);
+          audioFolder.file(audioName, buf);
           s.fileUrl = 'zip:' + audioPath;
         }
       } catch (e) {
@@ -2444,16 +2614,7 @@
       }
     }
 
-    // Persist quick-access state (favourites/recents + UI prefs) in portable package.
-    const boardId = String(portable && portable.id ? portable.id : 'default');
     zip.file('board.json', JSON.stringify(portable, null, 2));
-    zip.file('state.json', JSON.stringify({
-      favourites: readJsonFromLocalStorage(FAVOURITES_KEY_PREFIX + boardId, []),
-      recents: readJsonFromLocalStorage(RECENTS_KEY_PREFIX + boardId, []),
-      quickAccessCollapsed: readJsonFromLocalStorage(QUICK_ACCESS_COLLAPSED_KEY_PREFIX + boardId, { recents: false, favourites: false }),
-      favouritesRows: readJsonFromLocalStorage(FAVOURITES_ROWS_KEY, 1),
-      recentsRows: readJsonFromLocalStorage(RECENTS_ROWS_KEY, 1)
-    }, null, 2));
     zip.file('manifest.json', JSON.stringify({
       type: 'soundboard-portable',
       schemaVersion: 1,
@@ -2462,8 +2623,11 @@
     }, null, 2));
 
     const out = await zip.generateAsync({ type: 'blob' });
-    const zipName = safeFilenamePart(portable.name || 'board') + '-portable.zip';
-    await shareOrDownloadBlob(out, zipName, 'Soundboard portable export');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(out);
+    a.download = safeFilenamePart(portable.name || 'board') + '-portable.zip';
+    a.click();
+    URL.revokeObjectURL(a.href);
 
     if (downloadStatus) downloadStatus.textContent = warnings.length ? ('Portable ZIP exported (with ' + warnings.length + ' warnings).') : 'Portable ZIP exported.';
     if (warnings.length) {
@@ -2507,33 +2671,8 @@
       return;
     }
     const board = Board.normalizeBoard(parsed);
-
-    // Restore quick-access state if present.
-    const stateFile = zip.file('state.json');
-    if (stateFile) {
-      try {
-        const stateText = await stateFile.async('text');
-        const st = JSON.parse(stateText || '{}');
-        const boardId = String(board && board.id ? board.id : 'default');
-        if (Array.isArray(st.favourites)) writeJsonToLocalStorage(FAVOURITES_KEY_PREFIX + boardId, st.favourites.map((x) => String(x)));
-        if (Array.isArray(st.recents)) writeJsonToLocalStorage(RECENTS_KEY_PREFIX + boardId, st.recents.map((x) => String(x)));
-        if (st.quickAccessCollapsed && typeof st.quickAccessCollapsed === 'object') {
-          writeJsonToLocalStorage(QUICK_ACCESS_COLLAPSED_KEY_PREFIX + boardId, {
-            recents: !!st.quickAccessCollapsed.recents,
-            favourites: !!st.quickAccessCollapsed.favourites
-          });
-        }
-        if (st.favouritesRows != null) {
-          try { localStorage.setItem(FAVOURITES_ROWS_KEY, String(st.favouritesRows)); } catch (_) {}
-        }
-        if (st.recentsRows != null) {
-          try { localStorage.setItem(RECENTS_ROWS_KEY, String(st.recentsRows)); } catch (_) {}
-        }
-      } catch (e) {
-        console.warn('state.json restore failed', e);
-      }
-    }
     const sounds = Array.isArray(board.sounds) ? board.sounds : [];
+    const importNonce = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
     const warnings = [];
     let i = 0;
     for (const s of sounds) {
@@ -2547,7 +2686,7 @@
         const zf = zip.file(path);
         if (zf) {
           const ab = await zf.async('arraybuffer');
-          const blobId = 'portable-' + String(s.id);
+          const blobId = 'portable-' + String(board.id || 'board') + '-' + importNonce + '-' + String(s.id);
           await LocalAudio.putBlob(blobId, ab);
           s.fileUrl = 'local:' + blobId;
         } else {
@@ -3032,6 +3171,7 @@
     const hotkeyOnlyBtn = toolbarEl.querySelector('[data-action="hotkey-only-toggle"]');
     const analyzeAllBtn = toolbarEl.querySelector('[data-action="analyze-all"]');
     const helpBtn = toolbarEl.querySelector('[data-action="help-open"]');
+    const themeBtn = toolbarEl.querySelector('[data-action="theme-toggle"]');
     if (addBtn) addBtn.addEventListener('click', addSound);
     if (importBtn && importInput) importBtn.addEventListener('click', () => importInput.click());
     if (importInput) importInput.addEventListener('change', (e) => { if (e.target.files[0]) importBoard(e.target.files[0]); e.target.value = ''; });
@@ -3140,6 +3280,7 @@
     if (hotkeyOnlyBtn) bindTapAndClick(hotkeyOnlyBtn, toggleHotkeyOnlyFilter);
     if (analyzeAllBtn) analyzeAllBtn.addEventListener('click', analyzeAllSounds);
     if (helpBtn) helpBtn.addEventListener('click', openHelpScreen);
+    if (themeBtn) themeBtn.addEventListener('click', cycleThemePreference);
     if (favouritesReorderToggleEl) {
       bindTapAndClick(favouritesReorderToggleEl, function () {
         setFavouriteReorderMode(!favouriteReorderMode);
@@ -3215,6 +3356,7 @@
       const quickWeb = quickBarEl.querySelector('[data-action="quick-web"]');
       const quickSearch = quickBarEl.querySelector('[data-action="quick-search"]');
       const quickHotkeyOnly = quickBarEl.querySelector('[data-action="quick-hotkey-only"]');
+      const quickTheme = quickBarEl.querySelector('[data-action="quick-theme"]');
       const quickSettings = quickBarEl.querySelector('[data-action="quick-settings"]');
       const quickHelp = quickBarEl.querySelector('[data-action="quick-help"]');
       const quickReorder = quickBarEl.querySelector('[data-action="quick-reorder"]');
@@ -3231,6 +3373,7 @@
         });
       }
       if (quickHotkeyOnly) bindTapAndClick(quickHotkeyOnly, toggleHotkeyOnlyFilter);
+      if (quickTheme) quickTheme.addEventListener('click', cycleThemePreference);
       if (quickReorder) {
         quickReorder.addEventListener('click', function () {
           setReorderMode(!reorderMode);
@@ -3421,7 +3564,11 @@
         closeHelpScreen();
         return;
       }
-      const isTypingTarget = !!(e.target && (e.target.closest('input') || e.target.closest('textarea')));
+      const isTypingTarget = !!(e.target && (
+        e.target.closest('input')
+        || e.target.closest('textarea')
+        || e.target.closest('[contenteditable="true"]')
+      ));
       const key = (e.key || '').toUpperCase();
       if (!isTypingTarget && !e.metaKey && !e.ctrlKey && !e.altKey && e.shiftKey && key === 'H' && !hotkeyMap.has('Shift+H')) {
         e.preventDefault();
@@ -3468,6 +3615,7 @@
   function init() {
     initI18n();
     initHeaderMenu();
+    applyThemePreference(loadThemePreference());
     favouriteStripRows = loadFavouriteRows();
     recentStripRows = loadRecentRows();
     initToolbar();

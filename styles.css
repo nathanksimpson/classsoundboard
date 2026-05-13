@@ -1,14 +1,21 @@
 /* Soundboard — minimal, mobile-friendly grid */
 
 :root {
-  --bg: #1a1a1e;
-  --surface: #25252b;
-  --text: #f0f0f0;
-  --text-muted: #9ca3af;
-  --primary: #4a9eff;
-  --danger: #ef4444;
+  /* Theme tokens (default = light; dark uses prefers-color-scheme unless overridden). */
+  --bg: #f7f7fb;
+  --surface: #ffffff;
+  --text: #0f172a;
+  --text-muted: #475569;
+  --primary: #2563eb;
+  --danger: #dc2626;
+  --border: rgba(15, 23, 42, 0.12);
+  --border-strong: rgba(15, 23, 42, 0.18);
+  --panel: rgba(255, 255, 255, 0.98);
+  --panel-alt: rgba(248, 250, 252, 0.92);
+  --overlay: rgba(2, 6, 23, 0.45);
   --radius: 8px;
-  --shadow: 0 2px 8px rgba(0,0,0,0.3);
+  --shadow: 0 2px 10px rgba(2, 6, 23, 0.12);
+  color-scheme: light;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
@@ -19,6 +26,40 @@
   --mobile-overlay-offset: 140px;
   --panel-max-height: min(92vh, calc(var(--viewport-height) - (2 * var(--space-4))));
   --panel-mobile-max-height: calc(var(--viewport-height) - var(--mobile-overlay-offset) - var(--safe-bottom));
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="dark"]) {
+    --bg: #1a1a1e;
+    --surface: #25252b;
+    --text: #f0f0f0;
+    --text-muted: #9ca3af;
+    --primary: #4a9eff;
+    --danger: #ef4444;
+    --border: rgba(255,255,255,0.10);
+    --border-strong: rgba(255,255,255,0.16);
+    --panel: rgba(18, 21, 27, 0.98);
+    --panel-alt: rgba(26, 26, 30, 0.96);
+    --overlay: rgba(0,0,0,0.55);
+    --shadow: 0 2px 10px rgba(0,0,0,0.30);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #1a1a1e;
+  --surface: #25252b;
+  --text: #f0f0f0;
+  --text-muted: #9ca3af;
+  --primary: #4a9eff;
+  --danger: #ef4444;
+  --border: rgba(255,255,255,0.10);
+  --border-strong: rgba(255,255,255,0.16);
+  --panel: rgba(18, 21, 27, 0.98);
+  --panel-alt: rgba(26, 26, 30, 0.96);
+  --overlay: rgba(0,0,0,0.55);
+  --shadow: 0 2px 10px rgba(0,0,0,0.30);
+  color-scheme: dark;
 }
 
 @supports (height: 100svh) {
@@ -55,7 +96,7 @@ body.body--overlay-open {
 .header {
   padding: calc(var(--space-3) + var(--safe-top)) var(--space-4) var(--space-3);
   background: var(--surface);
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -123,7 +164,7 @@ body.body--overlay-open {
 .header__popout-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0,0,0,0.45);
+  background: var(--overlay);
 }
 
 .header__popout-panel {
@@ -137,9 +178,9 @@ body.body--overlay-open {
   gap: 10px;
   padding: 12px;
   border-radius: var(--radius);
-  border: 1px solid rgba(255,255,255,0.14);
-  background: rgba(18, 21, 27, 0.98);
-  box-shadow: 0 8px 20px rgba(0,0,0,0.35);
+  border: 1px solid var(--border-strong);
+  background: var(--panel);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.25);
 }
 
 .header__popout-header {
@@ -158,8 +199,8 @@ body.body--overlay-open {
   min-height: 32px;
   min-width: 32px;
   border-radius: 8px;
-  border: 1px solid rgba(255,255,255,0.2);
-  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--border-strong);
+  background: rgba(127,127,127,0.10);
   color: var(--text);
   cursor: pointer;
 }
@@ -230,9 +271,9 @@ body.body--overlay-open {
   align-items: center;
   gap: 8px;
   padding: 8px;
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: rgba(0,0,0,0.12);
+  background: rgba(127,127,127,0.06);
 }
 
 .toolbar__group-label {
@@ -296,8 +337,8 @@ body.body--overlay-open {
   gap: 6px;
   padding: 6px 8px;
   border-radius: var(--radius);
-  background: rgba(0,0,0,0.15);
-  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(127,127,127,0.06);
+  border: 1px solid var(--border);
 }
 
 .search__input {
@@ -398,7 +439,7 @@ body.body--overlay-open {
   cursor: pointer;
   background: var(--surface);
   color: var(--text);
-  border: 1px solid rgba(255,255,255,0.12);
+  border: 1px solid var(--border);
 }
 
 .btn:hover {
@@ -1526,15 +1567,15 @@ body.body--overlay-open {
     grid-template-columns: repeat(8, 1fr);
     gap: 8px;
     padding: 10px 12px calc(10px + var(--safe-bottom));
-    background: rgba(26, 26, 30, 0.96);
-    border-top: 1px solid rgba(255,255,255,0.10);
+    background: var(--panel-alt);
+    border-top: 1px solid var(--border);
     backdrop-filter: blur(8px);
   }
 
   .quick-bar__btn {
     min-height: var(--touch-target-min);
     border-radius: 10px;
-    border: 1px solid rgba(255,255,255,0.12);
+    border: 1px solid var(--border);
     background: var(--surface);
     color: var(--text);
     font-weight: 600;

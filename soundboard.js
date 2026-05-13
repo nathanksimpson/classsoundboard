@@ -1423,11 +1423,49 @@
   }
 
   function loadInitialBoard() {
-    const saved = Storage && Storage.loadBoard();
+    const saved = Storage && Storage.loadBoard ? Storage.loadBoard() : null;
     if (saved && Board.validateBoard(saved).ok) {
       setBoard(Board.normalizeBoard(saved));
       return;
     }
+
+    // If the board was saved to IndexedDB (e.g. localStorage quota exceeded),
+    // we must load it asynchronously; otherwise refresh looks like a "reset".
+    // Also: try IndexedDB even if the location flag is missing (older versions / interrupted saves).
+    try {
+      const location = Storage && Storage.getBoardLocation ? Storage.getBoardLocation() : 'local';
+      if ((location === 'idb' || location === 'local') && Storage && Storage.loadBoardAsync) {
+        Storage.loadBoardAsync().then((idbBoard) => {
+          if (idbBoard && Board.validateBoard(idbBoard).ok) {
+            setBoard(Board.normalizeBoard(idbBoard));
+            return;
+          }
+          // fall through to sample fetch
+          const url = getBoardJsonPath();
+          fetch(url)
+            .then((r) => (r.ok ? r.json() : Promise.reject(new Error('Failed to load board'))))
+            .then((data) => {
+              const result = Board.validateBoard(data);
+              if (!result.ok) throw new Error(result.error);
+              setBoard(Board.normalizeBoard(data));
+            })
+            .catch((err) => {
+              console.warn('soundboard: load board failed', err);
+              setBoard({
+                schemaVersion: 1,
+                id: 'default',
+                name: 'My Soundboard',
+                description: '',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                sounds: []
+              });
+            });
+        }).catch(() => {});
+        return;
+      }
+    } catch (_) {}
+
     const url = getBoardJsonPath();
     fetch(url)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error('Failed to load board'))))
@@ -2646,10 +2684,7 @@
       return;
     }
     const LocalAudio = window.SoundboardLocalAudio;
-    if (!LocalAudio || !LocalAudio.putBlob) {
-      alert('Portable import requires local storage (IndexedDB) support.');
-      return;
-    }
+    const canPersistAudio = !!(LocalAudio && LocalAudio.putBlob);
     if (downloadStatus) downloadStatus.textContent = 'Reading zip…';
     const buf = await (file.arrayBuffer ? file.arrayBuffer() : new Promise((resolve, reject) => {
       const r = new FileReader();
@@ -2674,6 +2709,7 @@
     const sounds = Array.isArray(board.sounds) ? board.sounds : [];
     const importNonce = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
     const warnings = [];
+    let importedAudioCount = 0;
     let i = 0;
     for (const s of sounds) {
       i++;
@@ -2686,9 +2722,17 @@
         const zf = zip.file(path);
         if (zf) {
           const ab = await zf.async('arraybuffer');
-          const blobId = 'portable-' + String(board.id || 'board') + '-' + importNonce + '-' + String(s.id);
-          await LocalAudio.putBlob(blobId, ab);
-          s.fileUrl = 'local:' + blobId;
+          if (canPersistAudio) {
+            const blobId = 'portable-' + String(board.id || 'board') + '-' + importNonce + '-' + String(s.id);
+            await LocalAudio.putBlob(blobId, ab);
+            s.fileUrl = 'local:' + blobId;
+          } else {
+            const mime = guessMimeFromPath(path, 'audio/mpeg');
+            const blobUrl = URL.createObjectURL(new Blob([ab], { type: mime }));
+            s.fileUrl = blobUrl;
+            warnings.push('Audio is loaded for this session only (no IndexedDB): ' + (s.title || s.id));
+          }
+          importedAudioCount++;
         } else {
           warnings.push('Missing audio in zip: ' + path);
         }
@@ -2711,7 +2755,8 @@
     }
 
     setBoard(board);
-    saveToStorage();
+    // Only persist when audio is persistable; otherwise we would save blob: URLs that break on refresh.
+    if (canPersistAudio) saveToStorage();
     if (Audio && Audio.clearCache) Audio.clearCache();
     render();
     if (warnings.length) {

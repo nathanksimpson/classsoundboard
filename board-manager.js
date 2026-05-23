@@ -82,8 +82,24 @@ const RESERVED_BOARD_KEYS = new Set([
   'description',
   'createdAt',
   'updatedAt',
-  'sounds'
+  'sounds',
+  'quickAccess'
 ]);
+
+const MAX_RECENT_SOUNDS_IN_BOARD = 20;
+
+function normalizeQuickAccess(qa) {
+  if (!qa || typeof qa !== 'object') {
+    return { favourites: [], recents: [] };
+  }
+  const favourites = Array.isArray(qa.favourites)
+    ? qa.favourites.map((id) => String(id).trim()).filter(Boolean)
+    : [];
+  const recents = Array.isArray(qa.recents)
+    ? qa.recents.map((id) => String(id).trim()).filter(Boolean).slice(0, MAX_RECENT_SOUNDS_IN_BOARD)
+    : [];
+  return { favourites, recents };
+}
 
 function normalizeBoard(board) {
   const src = board && typeof board === 'object' ? board : {};
@@ -100,7 +116,8 @@ function normalizeBoard(board) {
     updatedAt: src.updatedAt ?? src.createdAt ?? new Date().toISOString(),
     sounds
   };
-  // Carry forward unknown / forward-compatible top-level fields (e.g. quickAccess).
+  normalized.quickAccess = normalizeQuickAccess(src.quickAccess);
+  // Carry forward unknown / forward-compatible top-level fields.
   Object.keys(src).forEach((key) => {
     if (!RESERVED_BOARD_KEYS.has(key)) {
       normalized[key] = src[key];

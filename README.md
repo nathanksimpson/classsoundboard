@@ -13,7 +13,8 @@ A client-side soundboard that loads boards from JSON and plays audio with low la
 
 - **Grid of sounds** — Click to play. Right-click a tile to edit.
 - **Add / Edit / Delete** — Toolbar: Add Sound. Modal: Title, Audio URL, Image URL, Category, Hotkey, Volume, Start/End (trim).
-- **Import / Export** — Import Board (JSON file), Export Board (downloads JSON).
+- **Import / Export** — Import Board (JSON or portable ZIP), Export Board (JSON), Export Portable ZIP (board + audio + images).
+- **Favourites & recents** — Starred sounds and recent plays are stored on the board as `quickAccess` (`favourites` and `recents` sound IDs). They are included in JSON export, portable ZIP (`board.json`), and browser save. Re-export after changing favourites so shared files stay up to date.
 - **Storage** — Changes are saved to the browser’s localStorage.
 - **Hotkeys** — Set a hotkey (e.g. Q) in the editor; press that key to play.
 - **Auto level** — LUFS-based normalization toward -14 LUFS; use **Analyze all** after import. See [AUDIO.md](AUDIO.md).

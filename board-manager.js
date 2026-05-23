@@ -13,6 +13,14 @@ function validateSound(s) {
   if (s.startMs != null && typeof s.startMs !== 'number') return false;
   if (s.endMs != null && typeof s.endMs !== 'number') return false;
   if (s.startMs != null && s.endMs != null && s.startMs >= s.endMs) return false;
+  if (s.extra && typeof s.extra === 'object') {
+    if (s.extra.normGain != null && (typeof s.extra.normGain !== 'number' || !isFinite(s.extra.normGain) || s.extra.normGain < 0 || s.extra.normGain > 8)) {
+      return false;
+    }
+    if (s.extra.normAlgoVersion != null && (typeof s.extra.normAlgoVersion !== 'number' || s.extra.normAlgoVersion < 1)) {
+      return false;
+    }
+  }
   return true;
 }
 
@@ -44,8 +52,24 @@ function normalizeSound(s) {
     endMs: s.endMs != null ? Number(s.endMs) : null,
     hotkey: s.hotkey != null ? String(s.hotkey).trim() : '',
     color: s.color != null ? String(s.color).trim() : '',
-    extra: s.extra && typeof s.extra === 'object' ? s.extra : {}
+    extra: normalizeSoundExtra(s.extra)
   };
+}
+
+function normalizeSoundExtra(extra) {
+  if (!extra || typeof extra !== 'object') return {};
+  const out = { ...extra };
+  if (out.normGain != null) {
+    const g = Number(out.normGain);
+    out.normGain = isFinite(g) ? Math.max(0, Math.min(8, g)) : undefined;
+    if (out.normGain === undefined) delete out.normGain;
+  }
+  if (out.normAlgoVersion != null) {
+    const v = Number(out.normAlgoVersion);
+    out.normAlgoVersion = isFinite(v) && v >= 1 ? Math.floor(v) : undefined;
+    if (out.normAlgoVersion === undefined) delete out.normAlgoVersion;
+  }
+  return out;
 }
 
 // Reserved top-level fields that have explicit normalization rules below.

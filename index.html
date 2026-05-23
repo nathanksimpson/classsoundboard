@@ -4,9 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Soundboard</title>
-  <link rel="stylesheet" href="styles.css?v=20260506-8">
+  <link rel="stylesheet" href="styles.css?v=20260524-1">
 </head>
 <body>
+  <input type="file" id="import-input" accept=".json,.zip,application/zip" hidden>
   <header class="header">
     <div class="header__toprow">
       <h1 id="board-name" class="header__title" title="Click to change board name">Soundboard</h1>
@@ -47,15 +48,12 @@
 
       <div class="toolbar__group toolbar__group--board-file" aria-label="Board file tools">
         <span class="toolbar__group-label" data-i18n="toolbar.group.board">Board File</span>
-        <input type="file" id="import-input" accept=".json,.zip,application/zip" hidden>
+        <button type="button" class="btn btn--secondary" data-action="import-file" data-i18n="toolbar.importFile">Import board file…</button>
         <button type="button" class="btn btn--secondary" data-action="export" data-i18n="toolbar.export">Export Board</button>
         <button type="button" class="btn btn--secondary" data-action="export-portable" data-i18n="toolbar.exportPortable" data-i18n-title="toolbar.exportPortableTitle" title="Export a .zip with board + audio + images (offline portable)">Export Portable ZIP</button>
         <button type="button" class="btn btn--secondary" data-action="portable-check" data-i18n="toolbar.portableCheck" data-i18n-title="toolbar.portableCheckTitle" title="Check if your board is ready for portable ZIP (offline) export">Portable readiness check</button>
         <button type="button" class="btn btn--danger" data-action="clear-data" data-i18n="toolbar.clearData" data-i18n-title="toolbar.clearDataTitle" title="Clear all saved board/app data and reset to defaults">
           Clear All Data
-        </button>
-        <button type="button" id="import-dropzone" class="import-dropzone" data-i18n="toolbar.importDropzone" data-i18n-title="toolbar.importDropzoneTitle" title="Drop a .json board file here, or click to choose one">
-          Import Sounds (Drag and drop or click)
         </button>
         <div id="file-mode-controls" class="file-mode-controls" hidden>
           <button type="button" id="file-mode-attach" class="btn btn--secondary" title="Pick or save a portable ZIP and keep it in sync. Chrome/Edge desktop only.">Sync to file…</button>
@@ -68,9 +66,13 @@
       <div class="toolbar__group toolbar__group--audio-tools" aria-label="Audio tools">
         <span class="toolbar__group-label" data-i18n="toolbar.group.audio">Audio Tools</span>
         <button type="button" class="btn btn--secondary" data-action="download-sounds" title="Download audio + images, save into the app, and update the board to use local copies" data-i18n="toolbar.downloadMedia" data-i18n-title="toolbar.downloadMediaTitle">Download media</button>
-        <label class="btn btn--secondary auto-level" title="Automatically level sound volumes">
+        <label class="btn btn--secondary auto-level" title="Apply per-sound LUFS normalization gain when playing">
           <input type="checkbox" id="auto-level-toggle" class="auto-level__check" checked>
           <span class="auto-level__label" data-i18n="toolbar.autoLevel">Auto level</span>
+        </label>
+        <label class="btn btn--secondary auto-level" title="Gentle master bus compression to tame peaks">
+          <input type="checkbox" id="compressor-toggle" class="auto-level__check" checked>
+          <span class="auto-level__label">Peak safety</span>
         </label>
         <button type="button" class="btn btn--secondary" data-action="analyze-all" title="Analyze all sounds for consistent volume (recommended once per board)" data-i18n="toolbar.analyzeAll" data-i18n-title="toolbar.analyzeAllTitle">Analyze all</button>
       </div>
@@ -100,7 +102,15 @@
     </div>
   </header>
 
-  <main class="main">
+  <main class="main" id="main-content">
+    <section class="main-import" id="main-import" aria-label="Import board">
+      <button type="button" id="import-dropzone" class="import-dropzone" tabindex="0"
+        data-i18n="toolbar.importDropzone" data-i18n-title="toolbar.importDropzoneTitle"
+        title="Drop a .json or portable .zip board here, or click to choose a file">
+        Drop board JSON or portable ZIP here — or click to browse
+      </button>
+      <p id="import-bar-status" class="main-import__status" aria-live="polite"></p>
+    </section>
     <section id="quick-access" class="quick-access" aria-label="Quick access sounds">
       <div id="recents-section" class="quick-access__section" hidden>
         <div class="quick-access__header">
@@ -176,7 +186,7 @@
         <h3 data-i18n="help.enHeader">English Guide</h3>
         <p data-i18n="help.enIntro">Use this soundboard to quickly play, organize, and manage sounds.</p>
         <ul>
-          <li data-i18n="help.en1">Add sounds with Add Sound or Add Web Sound.</li>
+          <li data-i18n="help.en1">Add sounds with Add Sound or Add Web Sound, or drop a board JSON / portable ZIP on the main screen.</li>
           <li data-i18n="help.en2">Edit a tile with the pencil icon (or right-click on desktop).</li>
           <li data-i18n="help.en3">Assign hotkeys like Q, Shift+A, or Shift+.</li>
           <li data-i18n="help.en4">Use Hotkeys only to show only sounds with hotkeys.</li>
@@ -254,6 +264,7 @@
     <div class="modal__panel">
       <h2 id="modal-title" class="modal__title">Edit Sound</h2>
       <p id="modal-error" class="modal__error" aria-live="polite"></p>
+      <div class="modal__scroll">
       <form id="modal-form" class="modal__form">
         <label class="field">
           <span class="field__label">Title</span>
@@ -314,27 +325,29 @@
           <input type="hidden" name="startSec" id="startSec-input">
           <input type="hidden" name="endSec" id="endSec-input">
         </div>
-        <div class="modal__actions modal__actions--wrap">
-          <button type="button" class="btn btn--secondary" data-action="preview">Preview</button>
-          <button type="button" class="btn btn--secondary" data-action="move-up" title="Move sound up">Move up</button>
-          <button type="button" class="btn btn--secondary" data-action="move-down" title="Move sound down">Move down</button>
-          <button type="submit" class="btn btn--primary" data-action="save">Save</button>
-          <button type="button" class="btn btn--secondary" data-action="cancel">Cancel</button>
-          <button type="button" class="btn btn--danger" data-action="delete">Delete</button>
-        </div>
       </form>
+      </div>
+      <div class="modal__actions modal__actions--wrap">
+        <button type="button" class="btn btn--secondary" data-action="preview">Preview</button>
+        <button type="button" class="btn btn--secondary" data-action="move-up" title="Move sound up">Move up</button>
+        <button type="button" class="btn btn--secondary" data-action="move-down" title="Move sound down">Move down</button>
+        <button type="submit" class="btn btn--primary" data-action="save" form="modal-form">Save</button>
+        <button type="button" class="btn btn--secondary" data-action="cancel">Cancel</button>
+        <button type="button" class="btn btn--danger" data-action="delete">Delete</button>
+      </div>
     </div>
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" crossorigin="anonymous"></script>
   <datalist id="category-options"></datalist>
-  <script src="storage.js?v=20260513-8"></script>
-  <script src="local-audio.js?v=20260513-8"></script>
-  <script src="local-images.js?v=20260513-8"></script>
-  <script src="file-mode.js?v=20260513-8"></script>
-  <script src="audio-engine.js?v=20260513-8"></script>
-  <script src="board-manager.js?v=20260513-8"></script>
-  <script src="ui-renderer.js?v=20260513-8"></script>
-  <script src="soundboard.js?v=20260513-8"></script>
+  <script src="storage.js?v=20260524-1"></script>
+  <script src="local-audio.js?v=20260524-1"></script>
+  <script src="local-images.js?v=20260524-1"></script>
+  <script src="file-mode.js?v=20260524-1"></script>
+  <script src="loudness.js?v=20260524-1"></script>
+  <script src="audio-engine.js?v=20260524-1"></script>
+  <script src="board-manager.js?v=20260524-1"></script>
+  <script src="ui-renderer.js?v=20260524-1"></script>
+  <script src="soundboard.js?v=20260524-1"></script>
 </body>
 </html>

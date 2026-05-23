@@ -20,6 +20,9 @@
   const toolbarEl = document.getElementById('toolbar');
   const importInput = document.getElementById('import-input');
   const importDropzoneEl = document.getElementById('import-dropzone');
+  const mainImportEl = document.getElementById('main-import');
+  const mainContentEl = document.getElementById('main-content');
+  const importBarStatusEl = document.getElementById('import-bar-status');
   const modalEl = document.getElementById('modal');
   const modalForm = document.getElementById('modal-form');
   const modalError = document.getElementById('modal-error');
@@ -37,6 +40,7 @@
   const searchClearEl = document.getElementById('search-clear');
   const searchCountEl = document.getElementById('search-count');
   const autoLevelToggleEl = document.getElementById('auto-level-toggle');
+  const compressorToggleEl = document.getElementById('compressor-toggle');
   const quickBarEl = document.getElementById('quick-bar');
   const themeToggleBtn = toolbarEl && toolbarEl.querySelector('[data-action="theme-toggle"]');
   const quickThemeBtn = quickBarEl && quickBarEl.querySelector('[data-action="quick-theme"]');
@@ -82,6 +86,7 @@
   const CATEGORY_UI_KEY_PREFIX = 'soundboard-category-state:';
   const CATEGORY_ORDER_KEY_PREFIX = 'soundboard-category-order:';
   const AUTO_LEVEL_KEY = 'soundboard-auto-level';
+  const COMPRESSOR_KEY = 'soundboard-compressor';
   const LANGUAGE_KEY = 'soundboard-language';
   const THEME_KEY = 'soundboard-theme';
   const FAVOURITES_KEY_PREFIX = 'soundboard-favourites:';
@@ -121,8 +126,9 @@
       'toolbar.portableCheckTitle': 'Check if your board is ready for portable ZIP (offline) export',
       'toolbar.clearData': 'Clear All Data',
       'toolbar.clearDataTitle': 'Clear all saved board/app data and reset to defaults',
-      'toolbar.importDropzone': 'Import Sounds (Drag and drop or click)',
-      'toolbar.importDropzoneTitle': 'Import sounds: drag and drop a .json board file, or click to choose one',
+      'toolbar.importFile': 'Import board file…',
+      'toolbar.importDropzone': 'Drop board JSON or portable ZIP here — or click to browse',
+      'toolbar.importDropzoneTitle': 'Import a .json board or portable .zip (board + audio + images)',
       'toolbar.group.audio': 'Audio Tools',
       'toolbar.downloadMedia': 'Download media',
       'toolbar.downloadMediaTitle': 'Download audio + images, save into the app, and update the board to use local copies',
@@ -223,8 +229,9 @@
       'toolbar.portableCheckTitle': '보드가 휴대용 ZIP(오프라인) 내보내기 준비가 되었는지 점검',
       'toolbar.clearData': '전체 데이터 삭제',
       'toolbar.clearDataTitle': '저장된 보드/앱 데이터를 모두 삭제하고 기본값으로 재설정',
-      'toolbar.importDropzone': '사운드 가져오기 (드래그 앤 드롭 또는 클릭)',
-      'toolbar.importDropzoneTitle': '사운드 가져오기: .json 보드 파일을 드래그 앤 드롭하거나 클릭해 선택하세요',
+      'toolbar.importFile': '보드 파일 가져오기…',
+      'toolbar.importDropzone': 'JSON 또는 portable ZIP을 여기에 놓거나 클릭하세요',
+      'toolbar.importDropzoneTitle': '.json 보드 또는 portable .zip(오디오·이미지 포함) 가져오기',
       'toolbar.group.audio': '오디오 도구',
       'toolbar.downloadMedia': '미디어 다운로드',
       'toolbar.downloadMediaTitle': '오디오 + 이미지를 다운로드해 앱에 저장하고 로컬 파일로 업데이트',
@@ -404,6 +411,7 @@
     const isOpen = !!open;
     headerPopoutEl.hidden = !isOpen;
     headerToggleBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    syncOverlayBodyLock();
   }
 
   function toggleHeaderPopout() {
@@ -425,12 +433,14 @@
     }
     portableReportEl.hidden = false;
     portableReportEl.setAttribute('aria-hidden', 'false');
+    syncOverlayBodyLock();
   }
 
   function closePortableReport() {
     if (!portableReportEl) return;
     portableReportEl.hidden = true;
     portableReportEl.setAttribute('aria-hidden', 'true');
+    syncOverlayBodyLock();
   }
 
   async function copyPortableReportToClipboard() {
@@ -1916,8 +1926,13 @@
 
   function shouldAnalyzeSound(sound) {
     if (!sound || !sound.fileUrl) return false;
-    const gain = sound.extra && typeof sound.extra === 'object' ? sound.extra.normGain : null;
-    return !(typeof gain === 'number' && isFinite(gain));
+    const extra = sound.extra && typeof sound.extra === 'object' ? sound.extra : {};
+    const gain = extra.normGain;
+    const version = extra.normAlgoVersion;
+    const targetVersion = Audio && Audio.NORM_ALGO_VERSION ? Audio.NORM_ALGO_VERSION : 2;
+    if (!(typeof gain === 'number' && isFinite(gain))) return true;
+    if (version == null || version < targetVersion) return true;
+    return false;
   }
 
   function runAutoAnalyzeOnLoad() {
@@ -2077,11 +2092,12 @@
       const has = sound.extra && typeof sound.extra.normGain === 'number' && isFinite(sound.extra.normGain);
       if (!has) {
         if (!sound.extra || typeof sound.extra !== 'object') sound.extra = {};
-        Audio.analyzeFileUrl(sound.fileUrl).then(function (res) {
+        Audio.analyzeFileUrl(sound.fileUrl, sound).then(function (res) {
           if (res && typeof res.gain === 'number' && isFinite(res.gain)) {
             sound.extra.normGain = res.gain;
             sound.extra.normAnalyzedAt = new Date().toISOString();
-            sound.extra.normAlgoVersion = res.algoVersion || 1;
+            sound.extra.normAlgoVersion = res.algoVersion || (Audio.NORM_ALGO_VERSION || 2);
+            if (typeof res.lufs === 'number' && isFinite(res.lufs)) sound.extra.normLufs = res.lufs;
             saveToStorage();
           }
         }).catch(function () {});
@@ -2301,7 +2317,36 @@
     const modalOpen = !!(modalEl && !modalEl.hidden);
     const settingsOpen = !!(settingsScreenEl && !settingsScreenEl.hidden);
     const helpOpen = !!(helpScreenEl && !helpScreenEl.hidden);
-    document.body.classList.toggle('body--overlay-open', modalOpen || settingsOpen || helpOpen);
+    const popoutOpen = !!(headerPopoutEl && !headerPopoutEl.hidden);
+    const reportOpen = !!(portableReportEl && !portableReportEl.hidden);
+    document.body.classList.toggle('body--overlay-open', modalOpen || settingsOpen || helpOpen || popoutOpen || reportOpen);
+  }
+
+  function initVisualViewport() {
+    if (!window.visualViewport || !document.documentElement) return;
+    function update() {
+      const vv = window.visualViewport;
+      const root = document.documentElement;
+      root.style.setProperty('--visual-viewport-height', vv.height + 'px');
+      root.style.setProperty('--visual-viewport-offset-top', vv.offsetTop + 'px');
+    }
+    update();
+    window.visualViewport.addEventListener('resize', update);
+    window.visualViewport.addEventListener('scroll', update);
+    if (modalForm) {
+      modalForm.addEventListener('focusin', function (e) {
+        const t = e.target;
+        if (!t || !t.classList || !t.classList.contains('field__input')) return;
+        if (!modalEl || modalEl.hidden) return;
+        window.requestAnimationFrame(function () {
+          try {
+            t.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          } catch (_) {
+            try { t.scrollIntoView(true); } catch (_2) {}
+          }
+        });
+      });
+    }
   }
 
   function focusWithoutScroll(el) {
@@ -2315,6 +2360,7 @@
 
   function openModal(sound) {
     if (!modalEl || !modalForm) return;
+    setHeaderPopoutOpen(false);
     modalEl.dataset.soundId = sound ? sound.id : '';
     const uploadInput = document.getElementById('upload-audio-input');
     const uploadedHint = document.getElementById('uploaded-audio-hint');
@@ -2493,6 +2539,7 @@
 
   function openSettingsScreen() {
     if (!settingsScreenEl || !settingsListEl || !currentBoard) return;
+    setHeaderPopoutOpen(false);
     if (!settingsScreenEl.hidden) {
       focusWithoutScroll(settingsSearchEl);
       return;
@@ -2536,6 +2583,7 @@
 
   function openHelpScreen() {
     if (!helpScreenEl) return;
+    setHeaderPopoutOpen(false);
     helpScreenEl.hidden = false;
     helpScreenEl.setAttribute('aria-hidden', 'false');
     syncOverlayBodyLock();
@@ -3249,7 +3297,7 @@
     }
     const LocalAudio = window.SoundboardLocalAudio;
     const canPersistAudio = !!(LocalAudio && LocalAudio.putBlob);
-    if (downloadStatus) downloadStatus.textContent = 'Reading zip…';
+    setAppStatus('Reading zip…');
     const buf = await (file.arrayBuffer ? file.arrayBuffer() : new Promise((resolve, reject) => {
       const r = new FileReader();
       r.onload = () => resolve(r.result);
@@ -3346,10 +3394,10 @@
     if (warnings.length) {
       openPortableReport('Portable import warnings', 'Some files referenced in the board could not be found in the ZIP.', warnings);
     }
-    if (downloadStatus) {
-      downloadStatus.textContent = warnings.length ? 'Portable ZIP imported (with warnings).' : 'Portable ZIP imported.';
-      setTimeout(function () { if (downloadStatus) downloadStatus.textContent = ''; }, warnings.length ? 4500 : 2500);
-    }
+    setAppStatus(
+      warnings.length ? 'Portable ZIP imported (with warnings).' : 'Portable ZIP imported.',
+      { autoClearMs: warnings.length ? 4500 : 2500 }
+    );
   }
 
   async function runPortableReadinessCheck() {
@@ -3686,6 +3734,7 @@
       importPortableZip(file).catch(function (e) {
         alert('Invalid ZIP file.');
         console.warn('zip import failed', e);
+        setAppStatus('');
       });
       return;
     }
@@ -3700,8 +3749,11 @@
         }
         setBoard(Board.normalizeBoard(data));
         saveToStorageNow();
+        const n = currentBoard && currentBoard.sounds ? currentBoard.sounds.length : 0;
+        setAppStatus('Imported board (' + n + ' sound' + (n === 1 ? '' : 's') + ').', { autoClearMs: 3000 });
       } catch (e) {
         alert('Invalid JSON file.');
+        setAppStatus('');
       }
     };
     reader.readAsText(file);
@@ -3747,6 +3799,7 @@
           || k.startsWith(FAVOURITES_KEY_PREFIX)
           || k.startsWith(RECENTS_KEY_PREFIX)
           || k === AUTO_LEVEL_KEY
+          || k === COMPRESSOR_KEY
           || k === LANGUAGE_KEY
         )) {
           keysToDelete.push(k);
@@ -3818,11 +3871,118 @@
     });
   }
 
+  function setAppStatus(message, options) {
+    const text = message != null ? String(message) : '';
+    const autoClearMs = options && options.autoClearMs != null ? options.autoClearMs : 0;
+    if (importBarStatusEl) importBarStatusEl.textContent = text;
+    if (downloadStatus) downloadStatus.textContent = text;
+    if (autoClearMs > 0 && text) {
+      setTimeout(function () {
+        if (importBarStatusEl && importBarStatusEl.textContent === text) importBarStatusEl.textContent = '';
+        if (downloadStatus && downloadStatus.textContent === text) downloadStatus.textContent = '';
+      }, autoClearMs);
+    }
+  }
+
+  function initImportDropzone() {
+    if (!importDropzoneEl || !importInput) return;
+
+    const dropTargets = mainContentEl ? [mainContentEl] : [importDropzoneEl];
+    let fileDragDepth = 0;
+
+    function hasFileDrag(e) {
+      const types = e && e.dataTransfer && e.dataTransfer.types ? Array.from(e.dataTransfer.types) : [];
+      return types.includes('Files');
+    }
+
+    function clearDropActiveState() {
+      fileDragDepth = 0;
+      importDropzoneEl.classList.remove('import-dropzone--active');
+      if (mainImportEl) mainImportEl.classList.remove('main-import--active');
+      if (mainContentEl) mainContentEl.classList.remove('main--drop-active');
+    }
+
+    function setDropActiveState() {
+      importDropzoneEl.classList.add('import-dropzone--active');
+      if (mainImportEl) mainImportEl.classList.add('main-import--active');
+      if (mainContentEl) mainContentEl.classList.add('main--drop-active');
+    }
+
+    function processDroppedFiles(e) {
+      const files = e.dataTransfer && e.dataTransfer.files ? Array.from(e.dataTransfer.files) : [];
+      if (!files.length) return;
+      const file = files.find((f) => /\.(json|zip)$/i.test(f.name || '')) || files[0];
+      if (!file || !/\.(json|zip)$/i.test(file.name || '')) {
+        setAppStatus(t('status.invalidImportFile'), { autoClearMs: 2200 });
+        return;
+      }
+      setAppStatus(file.name.endsWith('.zip') ? 'Importing ZIP…' : 'Importing board…');
+      importBoard(file);
+    }
+
+    importDropzoneEl.addEventListener('click', function () {
+      importInput.click();
+    });
+    importDropzoneEl.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        importInput.click();
+      }
+    });
+
+    importInput.addEventListener('change', function (e) {
+      if (e.target.files && e.target.files[0]) {
+        setAppStatus('Importing…');
+        importBoard(e.target.files[0]);
+      }
+      e.target.value = '';
+    });
+
+    dropTargets.forEach((target) => {
+      target.addEventListener('dragenter', function (e) {
+        if (!hasFileDrag(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        fileDragDepth++;
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+        setDropActiveState();
+      });
+      target.addEventListener('dragover', function (e) {
+        if (!hasFileDrag(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+      });
+      target.addEventListener('dragleave', function (e) {
+        if (!hasFileDrag(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        fileDragDepth = Math.max(0, fileDragDepth - 1);
+        if (fileDragDepth === 0) clearDropActiveState();
+      });
+      target.addEventListener('dragend', function (e) {
+        if (!hasFileDrag(e)) return;
+        clearDropActiveState();
+      });
+      target.addEventListener('drop', function (e) {
+        if (!hasFileDrag(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        clearDropActiveState();
+        processDroppedFiles(e);
+      });
+    });
+
+    document.addEventListener('dragover', function (e) {
+      if (!hasFileDrag(e)) return;
+      e.preventDefault();
+    });
+  }
+
   function initToolbar() {
     if (!toolbarEl) return;
-    const boardFileGroupEl = toolbarEl.querySelector('.toolbar__group--board-file');
     const addBtn = toolbarEl.querySelector('[data-action="add"]');
-    const importBtn = toolbarEl.querySelector('[data-action="import"]');
+    const importFileBtn = toolbarEl.querySelector('[data-action="import-file"]');
     const exportBtn = toolbarEl.querySelector('[data-action="export"]');
     const exportPortableBtn = toolbarEl.querySelector('[data-action="export-portable"]');
     const portableCheckBtn = toolbarEl.querySelector('[data-action="portable-check"]');
@@ -3836,91 +3996,8 @@
     const helpBtn = toolbarEl.querySelector('[data-action="help-open"]');
     const themeBtn = toolbarEl.querySelector('[data-action="theme-toggle"]');
     if (addBtn) addBtn.addEventListener('click', addSound);
-    if (importBtn && importInput) importBtn.addEventListener('click', () => importInput.click());
-    if (importInput) importInput.addEventListener('change', (e) => { if (e.target.files[0]) importBoard(e.target.files[0]); e.target.value = ''; });
-    if (importDropzoneEl && importInput) {
-      const dropTargets = [importDropzoneEl];
-      if (boardFileGroupEl) dropTargets.push(boardFileGroupEl);
-
-      function hasFileDrag(e) {
-        const types = e && e.dataTransfer && e.dataTransfer.types ? Array.from(e.dataTransfer.types) : [];
-        return types.includes('Files');
-      }
-
-      function clearDropActiveState() {
-        importDropzoneEl.classList.remove('import-dropzone--active');
-        if (boardFileGroupEl) boardFileGroupEl.classList.remove('toolbar__group--drop-active');
-      }
-
-      function setDropActiveState() {
-        importDropzoneEl.classList.add('import-dropzone--active');
-        if (boardFileGroupEl) boardFileGroupEl.classList.add('toolbar__group--drop-active');
-      }
-
-      function processDroppedFiles(e) {
-        const files = e.dataTransfer && e.dataTransfer.files ? Array.from(e.dataTransfer.files) : [];
-        if (!files.length) return;
-        const file = files.find((f) => /\.(json|zip)$/i.test(f.name || '')) || files[0];
-        if (!file || !/\.(json|zip)$/i.test(file.name || '')) {
-          if (downloadStatus) {
-            downloadStatus.textContent = t('status.invalidImportFile');
-            setTimeout(function () {
-              if (downloadStatus) downloadStatus.textContent = '';
-            }, 2200);
-          }
-          return;
-        }
-        importBoard(file);
-      }
-
-      importDropzoneEl.addEventListener('click', function () {
-        importInput.click();
-      });
-      importDropzoneEl.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          importInput.click();
-        }
-      });
-
-      dropTargets.forEach((target) => {
-        ['dragenter', 'dragover'].forEach((evtName) => {
-          target.addEventListener(evtName, function (e) {
-            if (!hasFileDrag(e)) return;
-            e.preventDefault();
-            e.stopPropagation();
-            if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
-            setDropActiveState();
-          });
-        });
-        ['dragleave', 'dragend'].forEach((evtName) => {
-          target.addEventListener(evtName, function (e) {
-            if (!hasFileDrag(e)) return;
-            e.preventDefault();
-            e.stopPropagation();
-            clearDropActiveState();
-          });
-        });
-        target.addEventListener('drop', function (e) {
-          if (!hasFileDrag(e)) return;
-          e.preventDefault();
-          e.stopPropagation();
-          clearDropActiveState();
-          processDroppedFiles(e);
-        });
-      });
-
-      document.addEventListener('dragover', function (e) {
-        if (!hasFileDrag(e)) return;
-        e.preventDefault();
-      });
-      document.addEventListener('drop', function (e) {
-        if (!hasFileDrag(e)) return;
-        if (!boardFileGroupEl || !boardFileGroupEl.contains(e.target)) {
-          e.preventDefault();
-          clearDropActiveState();
-        }
-      });
+    if (importFileBtn && importInput) {
+      importFileBtn.addEventListener('click', function () { importInput.click(); });
     }
     if (exportBtn) exportBtn.addEventListener('click', exportBoard);
     if (exportPortableBtn) exportPortableBtn.addEventListener('click', function () {
@@ -4017,6 +4094,21 @@
         try { localStorage.setItem(AUTO_LEVEL_KEY, String(enabled)); } catch (_) {}
         if (Audio && Audio.setAutoLevelEnabled) Audio.setAutoLevelEnabled(enabled);
         if (enabled) runAutoAnalyzeOnLoad();
+      });
+    }
+
+    if (compressorToggleEl) {
+      let compOn = true;
+      try {
+        const raw = localStorage.getItem(COMPRESSOR_KEY);
+        if (raw != null) compOn = raw === 'true';
+      } catch (_) {}
+      compressorToggleEl.checked = compOn;
+      if (Audio && Audio.setCompressorEnabled) Audio.setCompressorEnabled(compOn);
+      compressorToggleEl.addEventListener('change', function () {
+        const enabled = !!compressorToggleEl.checked;
+        try { localStorage.setItem(COMPRESSOR_KEY, String(enabled)); } catch (_) {}
+        if (Audio && Audio.setCompressorEnabled) Audio.setCompressorEnabled(enabled);
       });
     }
 
@@ -4157,11 +4249,12 @@
       if (!s || !s.fileUrl) return setTimeout(step, 0);
       if (!s.extra || typeof s.extra !== 'object') s.extra = {};
 
-      Audio.analyzeFileUrl(s.fileUrl).then(function (res) {
+      Audio.analyzeFileUrl(s.fileUrl, s).then(function (res) {
         if (res && typeof res.gain === 'number' && isFinite(res.gain)) {
           s.extra.normGain = res.gain;
           s.extra.normAnalyzedAt = new Date().toISOString();
-          s.extra.normAlgoVersion = res.algoVersion || 1;
+          s.extra.normAlgoVersion = res.algoVersion || (Audio.NORM_ALGO_VERSION || 2);
+          if (typeof res.lufs === 'number' && isFinite(res.lufs)) s.extra.normLufs = res.lufs;
           updated++;
         }
       }).catch(function () {}).finally(function () {
@@ -4174,12 +4267,12 @@
 
   function initModal() {
     if (!modalEl || !modalForm) return;
-    const saveBtn = modalForm.querySelector('[data-action="save"]');
-    const cancelBtn = modalForm.querySelector('[data-action="cancel"]');
-    const deleteBtn = modalForm.querySelector('[data-action="delete"]');
-    const previewBtn = modalForm.querySelector('[data-action="preview"]');
-    const moveUpBtn = modalForm.querySelector('[data-action="move-up"]');
-    const moveDownBtn = modalForm.querySelector('[data-action="move-down"]');
+    const saveBtn = modalEl.querySelector('[data-action="save"]');
+    const cancelBtn = modalEl.querySelector('[data-action="cancel"]');
+    const deleteBtn = modalEl.querySelector('[data-action="delete"]');
+    const previewBtn = modalEl.querySelector('[data-action="preview"]');
+    const moveUpBtn = modalEl.querySelector('[data-action="move-up"]');
+    const moveDownBtn = modalEl.querySelector('[data-action="move-down"]');
     const volumeRange = modalForm.querySelector('[name="volume"]');
     const fileUrlInput = modalForm.querySelector('[name="fileUrl"]');
     const hotkeyInput = modalForm.querySelector('[name="hotkey"]');
@@ -4287,8 +4380,10 @@
     applyThemePreference(loadThemePreference());
     favouriteStripRows = loadFavouriteRows();
     recentStripRows = loadRecentRows();
+    initImportDropzone();
     initToolbar();
     initModal();
+    initVisualViewport();
     initKeyboard();
     if (portableReportCloseBtn) portableReportCloseBtn.addEventListener('click', closePortableReport);
     if (portableReportCopyBtn) portableReportCopyBtn.addEventListener('click', function () { copyPortableReportToClipboard(); });

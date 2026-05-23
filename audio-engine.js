@@ -1,18 +1,23 @@
 /**
  * audio-engine.js — Web Audio API: load, cache, play with trim and volume.
  * Pipeline: AudioContext → fetch/decode → AudioBuffer → BufferSource → GainNode → destination
+ * Normalization: ITU-R BS.1770 LUFS (see loudness.js), target -14 LUFS.
  */
 
 const MAX_SIMULTANEOUS_SOUNDS = 6;
 const PRELOAD_COUNT = 10;
+const NORM_ALGO_VERSION = 2;
+const TARGET_LUFS = -14;
+const MAX_NORM_GAIN_LINEAR = Math.pow(10, 12 / 20);
 
 let ctx = null;
 let masterVolume = 1;
 let autoLevelEnabled = true;
+let compressorEnabled = true;
 let masterGainNode = null;
 let compressorNode = null;
 const audioCache = new Map();
-const normGainCache = new Map(); // fileUrl -> gain
+const normGainCache = new Map(); // fileUrl -> { gain, algoVersion }
 const activeSources = [];
 
 function getContext() {
@@ -32,7 +37,7 @@ function ensureMasterChain() {
   masterGainNode.gain.setValueAtTime(masterVolume, c.currentTime);
 
   compressorNode = c.createDynamicsCompressor();
-  applyCompressorSettings(autoLevelEnabled);
+  applyCompressorSettings(compressorEnabled);
 
   masterGainNode.connect(compressorNode);
   compressorNode.connect(c.destination);
@@ -45,14 +50,12 @@ function applyCompressorSettings(enabled) {
   if (!c || !compressorNode) return;
   const comp = compressorNode;
   if (enabled) {
-    // Gentle “safety net” compression: reduces harsh peaks without pumping too much.
     comp.threshold.setValueAtTime(-18, c.currentTime);
     comp.knee.setValueAtTime(24, c.currentTime);
     comp.ratio.setValueAtTime(3, c.currentTime);
     comp.attack.setValueAtTime(0.003, c.currentTime);
     comp.release.setValueAtTime(0.25, c.currentTime);
   } else {
-    // Near-bypass (not perfect, but avoids reconnect pops).
     comp.threshold.setValueAtTime(0, c.currentTime);
     comp.knee.setValueAtTime(0, c.currentTime);
     comp.ratio.setValueAtTime(1, c.currentTime);
@@ -64,6 +67,21 @@ function applyCompressorSettings(enabled) {
 function clampVolume(v) {
   if (typeof v !== 'number' || isNaN(v)) return 1;
   return Math.max(0, Math.min(1, v));
+}
+
+function clampNormGain(g) {
+  if (typeof g !== 'number' || !isFinite(g)) return 1;
+  return Math.max(0, Math.min(MAX_NORM_GAIN_LINEAR, g));
+}
+
+function trimRangeFromSound(sound, buffer) {
+  if (!buffer) return { startSec: 0, endSec: 0 };
+  const startMs = sound && sound.startMs != null ? sound.startMs : 0;
+  const endMs = sound && sound.endMs != null ? sound.endMs : buffer.duration * 1000;
+  const startSec = Math.max(0, startMs / 1000);
+  const endSec = Math.min(buffer.duration, endMs / 1000);
+  if (endSec <= startSec) return { startSec: 0, endSec: buffer.duration };
+  return { startSec, endSec };
 }
 
 async function loadBuffer(fileUrl) {
@@ -109,66 +127,61 @@ function stopSound(soundId) {
   }
 }
 
-function computeNormalizationFromBuffer(buffer) {
+function computeNormalizationFromBuffer(buffer, range) {
   if (!buffer) return null;
-  const channels = buffer.numberOfChannels || 0;
-  if (!channels) return null;
-  const length = buffer.length || 0;
-  if (!length) return null;
-
-  // Sample the buffer to avoid heavy CPU on long clips.
-  const targetSamples = 20000;
-  const step = Math.max(1, Math.floor(length / targetSamples));
-
-  let sumSq = 0;
-  let count = 0;
-  let peak = 0;
-
-  // Use channel 0 as baseline, but include others by averaging.
-  const data = [];
-  for (let ch = 0; ch < channels; ch++) data.push(buffer.getChannelData(ch));
-
-  for (let i = 0; i < length; i += step) {
-    let v = 0;
-    for (let ch = 0; ch < channels; ch++) v += data[ch][i] || 0;
-    v = v / channels;
-    const av = Math.abs(v);
-    if (av > peak) peak = av;
-    sumSq += v * v;
-    count++;
+  const Loudness = window.SoundboardLoudness;
+  if (Loudness && Loudness.computeNormalizationGain) {
+    const res = Loudness.computeNormalizationGain(buffer, {
+      startSec: range && range.startSec,
+      endSec: range && range.endSec,
+      targetLufs: TARGET_LUFS
+    });
+    if (!res || typeof res.gain !== 'number' || !isFinite(res.gain)) return null;
+    return {
+      gain: res.gain,
+      gainDb: res.gainDb,
+      lufs: res.lufs,
+      truePeakDb: res.truePeakDb,
+      algoVersion: res.algoVersion || NORM_ALGO_VERSION
+    };
   }
-
-  if (!count) return null;
-  const rms = Math.sqrt(sumSq / count);
-  const eps = 1e-8;
-  const rmsDb = 20 * Math.log10(Math.max(eps, rms));
-  const peakDb = 20 * Math.log10(Math.max(eps, peak));
-
-  const targetRmsDb = -18;
-  let gainDb = targetRmsDb - rmsDb;
-
-  // Clamp boosts/cuts to keep things sane.
-  gainDb = Math.max(-12, Math.min(12, gainDb));
-
-  // Prevent clipping: ensure peak after gain stays below -1 dBFS.
-  const peakAfterDb = peakDb + gainDb;
-  if (peakAfterDb > -1) gainDb -= (peakAfterDb - (-1));
-
-  const gain = Math.pow(10, gainDb / 20);
-  return { gain, gainDb, rmsDb, peakDb };
+  return null;
 }
 
-function analyzeFileUrl(fileUrl) {
+function cacheKeyForAnalyze(fileUrl, range) {
+  const s = range && range.startSec != null ? range.startSec.toFixed(3) : '0';
+  const e = range && range.endSec != null ? range.endSec.toFixed(3) : 'full';
+  return fileUrl + '|' + s + '|' + e;
+}
+
+function analyzeFileUrl(fileUrl, soundOrOpts) {
   if (!fileUrl) return Promise.resolve(null);
-  if (normGainCache.has(fileUrl)) {
-    return Promise.resolve({ gain: normGainCache.get(fileUrl), algoVersion: 1 });
-  }
+  const sound = soundOrOpts && soundOrOpts.fileUrl ? soundOrOpts : null;
+  const opts = sound || soundOrOpts || {};
+
   return loadBuffer(fileUrl).then((buffer) => {
     if (!buffer) return null;
-    const res = computeNormalizationFromBuffer(buffer);
+    const range = trimRangeFromSound(
+      sound || { startMs: opts.startMs, endMs: opts.endMs },
+      buffer
+    );
+    const key = cacheKeyForAnalyze(fileUrl, range);
+    if (normGainCache.has(key)) {
+      const cached = normGainCache.get(key);
+      return { ...cached, algoVersion: cached.algoVersion || NORM_ALGO_VERSION };
+    }
+    const res = computeNormalizationFromBuffer(buffer, range);
     if (!res || typeof res.gain !== 'number' || !isFinite(res.gain)) return null;
-    normGainCache.set(fileUrl, res.gain);
-    return { ...res, algoVersion: 1 };
+    const entry = {
+      gain: res.gain,
+      gainDb: res.gainDb,
+      lufs: res.lufs,
+      truePeakDb: res.truePeakDb,
+      algoVersion: res.algoVersion || NORM_ALGO_VERSION
+    };
+    normGainCache.set(key, entry);
+    normGainCache.set(fileUrl, entry);
+    return entry;
   });
 }
 
@@ -188,12 +201,17 @@ function playSound(sound) {
         ? sound.extra.normGain
         : null;
       if (fromExtra != null) {
-        normGain = Math.max(0, Math.min(6, fromExtra));
-      } else if (normGainCache.has(sound.fileUrl)) {
-        normGain = Math.max(0, Math.min(6, normGainCache.get(sound.fileUrl)));
+        normGain = clampNormGain(fromExtra);
       } else {
-        // Non-blocking: compute for this session; persistence is handled by "Analyze all".
-        analyzeFileUrl(sound.fileUrl).catch(function () {});
+        const range = trimRangeFromSound(sound, buffer);
+        const key = cacheKeyForAnalyze(sound.fileUrl, range);
+        if (normGainCache.has(key)) {
+          normGain = clampNormGain(normGainCache.get(key).gain);
+        } else if (normGainCache.has(sound.fileUrl)) {
+          normGain = clampNormGain(normGainCache.get(sound.fileUrl).gain);
+        } else {
+          analyzeFileUrl(sound.fileUrl, sound).catch(function () {});
+        }
       }
     }
     const vol = perSound * normGain;
@@ -257,12 +275,20 @@ function getMasterVolume() {
 
 function setAutoLevelEnabled(enabled) {
   autoLevelEnabled = !!enabled;
-  ensureMasterChain();
-  applyCompressorSettings(autoLevelEnabled);
 }
 
 function getAutoLevelEnabled() {
   return autoLevelEnabled;
+}
+
+function setCompressorEnabled(enabled) {
+  compressorEnabled = !!enabled;
+  ensureMasterChain();
+  applyCompressorSettings(compressorEnabled);
+}
+
+function getCompressorEnabled() {
+  return compressorEnabled;
 }
 
 function getDurationSeconds(fileUrl) {
@@ -281,8 +307,12 @@ window.SoundboardAudio = {
   getMasterVolume,
   setAutoLevelEnabled,
   getAutoLevelEnabled,
+  setCompressorEnabled,
+  getCompressorEnabled,
   analyzeFileUrl,
   getDurationSeconds,
+  NORM_ALGO_VERSION,
+  TARGET_LUFS,
   MAX_SIMULTANEOUS_SOUNDS,
   PRELOAD_COUNT
 };

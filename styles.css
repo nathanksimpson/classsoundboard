@@ -23,9 +23,12 @@
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --viewport-height: 100vh;
-  --mobile-overlay-offset: 140px;
-  --panel-max-height: min(92vh, calc(var(--viewport-height) - (2 * var(--space-4))));
-  --panel-mobile-max-height: calc(var(--viewport-height) - var(--mobile-overlay-offset) - var(--safe-bottom));
+  --quick-bar-height: 72px;
+  --mobile-overlay-offset: calc(var(--quick-bar-height) + var(--space-4) + var(--safe-top));
+  --visual-viewport-height: var(--viewport-height);
+  --visual-viewport-offset-top: 0px;
+  --panel-max-height: min(92vh, calc(var(--visual-viewport-height) - (2 * var(--space-4)) - var(--visual-viewport-offset-top)));
+  --panel-mobile-max-height: calc(var(--visual-viewport-height) - var(--space-4) - var(--safe-top) - var(--safe-bottom));
 }
 
 @media (prefers-color-scheme: dark) {
@@ -91,6 +94,12 @@ body {
 
 body.body--overlay-open {
   overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body.body--overlay-open .quick-bar {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .header {
@@ -169,10 +178,12 @@ body.body--overlay-open {
 
 .header__popout-panel {
   position: relative;
-  margin: calc(var(--space-3) + var(--safe-top)) var(--space-4) 0 var(--space-4);
+  margin: calc(var(--space-3) + var(--safe-top)) var(--space-4) calc(var(--space-3) + var(--safe-bottom)) var(--space-4);
   max-width: min(960px, calc(100vw - (var(--space-4) * 2)));
-  max-height: min(78vh, 760px);
+  max-height: min(760px, var(--panel-mobile-max-height));
   overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -316,10 +327,39 @@ body.body--overlay-open {
   box-shadow: 0 0 0 1px rgba(74, 158, 255, 0.25) inset;
 }
 
-@media (max-width: 1100px) {
-  .import-dropzone {
-    display: none;
+.main-import {
+  margin-bottom: var(--space-3);
+}
+
+.main-import .import-dropzone {
+  width: 100%;
+}
+
+@media (max-width: 700px) {
+  .main-import .import-dropzone {
+    font-size: 0.8rem;
+    padding: 12px 10px;
+    line-height: 1.35;
   }
+}
+
+.main-import__status {
+  margin: 6px 0 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  min-height: 1.2em;
+}
+
+.main-import--active .import-dropzone,
+.import-dropzone.import-dropzone--active {
+  border-color: var(--primary);
+  color: var(--text);
+  background: rgba(74, 158, 255, 0.2);
+}
+
+.main--drop-active {
+  outline: 2px dashed var(--primary);
+  outline-offset: -4px;
 }
 
 .toolbar__group--search {
@@ -1287,16 +1327,41 @@ body.body--overlay-open {
 
 .modal__panel {
   position: relative;
+  display: flex;
+  flex-direction: column;
   background: var(--surface);
   border-radius: var(--radius);
-  padding: 20px;
+  padding: 0;
   max-width: 420px;
   width: 100%;
   max-height: var(--panel-max-height);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+
+.modal__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-  box-shadow: var(--shadow);
+  padding: 20px 20px 8px;
+}
+
+.modal__panel > .modal__title,
+.modal__panel > .modal__error {
+  padding-left: 20px;
+  padding-right: 20px;
+}
+
+.modal__panel > .modal__title {
+  padding-top: 20px;
+  margin-bottom: 0;
+}
+
+.modal__panel > .modal__error {
+  margin-top: 8px;
+  margin-bottom: 0;
 }
 
 .modal__title {
@@ -1359,7 +1424,18 @@ body.body--overlay-open {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 8px;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 12px 20px calc(12px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+}
+
+.modal__form .field__input {
+  scroll-margin-bottom: 120px;
 }
 
 /* Trim bar: playback range with two handles */
@@ -1599,16 +1675,6 @@ body.body--overlay-open {
     cursor: pointer;
   }
 
-  .help-screen {
-    align-items: flex-start;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .help-screen__panel {
-    max-height: var(--panel-mobile-max-height);
-  }
-
   .quick-bar__btn:hover {
     background: rgba(255,255,255,0.08);
   }
@@ -1621,33 +1687,42 @@ body.body--overlay-open {
 
   .settings-screen {
     align-items: flex-start;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    padding: calc(8px + var(--safe-top)) 8px calc(8px + 110px + var(--safe-bottom));
+    overflow: hidden;
+    padding: calc(8px + var(--safe-top)) 8px calc(8px + var(--safe-bottom));
   }
 
   .settings-screen__panel {
     width: 100%;
-    max-height: min(96vh, var(--panel-mobile-max-height));
+    max-height: var(--panel-mobile-max-height);
   }
 
-  .settings-screen__panel,
   .modal__panel {
     max-height: var(--panel-mobile-max-height);
   }
 
   .settings-list {
-    padding-bottom: calc(16px + 70px + var(--safe-bottom));
-  }
-
-  .modal__panel {
-    padding-bottom: calc(20px + 70px + var(--safe-bottom));
+    padding-bottom: calc(16px + var(--safe-bottom));
   }
 
   .modal {
     align-items: flex-start;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
+    overflow: hidden;
+  }
+
+  .header__popout-panel {
+    max-height: var(--panel-mobile-max-height);
+  }
+
+  .help-screen,
+  .portable-report {
+    align-items: flex-start;
+    overflow: hidden;
+    padding: calc(8px + var(--safe-top)) 8px calc(8px + var(--safe-bottom));
+  }
+
+  .help-screen__panel,
+  .portable-report__panel {
+    max-height: var(--panel-mobile-max-height);
   }
 
   .settings-screen__header {

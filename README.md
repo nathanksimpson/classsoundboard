@@ -16,6 +16,8 @@ A client-side soundboard that loads boards from JSON and plays audio with low la
 - **Import / Export** — Import Board (JSON file), Export Board (downloads JSON).
 - **Storage** — Changes are saved to the browser’s localStorage.
 - **Hotkeys** — Set a hotkey (e.g. Q) in the editor; press that key to play.
+- **Auto level** — LUFS-based normalization toward -14 LUFS; use **Analyze all** after import. See [AUDIO.md](AUDIO.md).
+- **Peak safety** — Optional master bus compression (separate from auto level).
 
 ## Blerp export
 
@@ -29,7 +31,9 @@ To copy a board from Blerp.com, use the **Blerp Scraper** app (separate folder i
 ## File layout
 
 - `index.html`, `styles.css`, `soundboard.js` — Main app
-- `audio-engine.js` — Web Audio: load, cache, play with trim/volume
+- `loudness.js` — BS.1770-style integrated loudness measurement
+- `audio-engine.js` — Web Audio: load, cache, play with trim/volume/LUFS gain
+- `AUDIO.md` — Audio leveling and URL schemes
 - `board-manager.js` — Load/validate board JSON, normalize state
 - `ui-renderer.js` — Render grid and tiles
 - `storage.js` — localStorage save/restore

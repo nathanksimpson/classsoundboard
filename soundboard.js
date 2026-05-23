@@ -20,9 +20,6 @@
   const toolbarEl = document.getElementById('toolbar');
   const importInput = document.getElementById('import-input');
   const importDropzoneEl = document.getElementById('import-dropzone');
-  const mainImportEl = document.getElementById('main-import');
-  const mainContentEl = document.getElementById('main-content');
-  const importBarStatusEl = document.getElementById('import-bar-status');
   const modalEl = document.getElementById('modal');
   const modalForm = document.getElementById('modal-form');
   const modalError = document.getElementById('modal-error');
@@ -40,7 +37,6 @@
   const searchClearEl = document.getElementById('search-clear');
   const searchCountEl = document.getElementById('search-count');
   const autoLevelToggleEl = document.getElementById('auto-level-toggle');
-  const compressorToggleEl = document.getElementById('compressor-toggle');
   const quickBarEl = document.getElementById('quick-bar');
   const themeToggleBtn = toolbarEl && toolbarEl.querySelector('[data-action="theme-toggle"]');
   const quickThemeBtn = quickBarEl && quickBarEl.querySelector('[data-action="quick-theme"]');
@@ -77,16 +73,17 @@
   const portableReportTitleEl = document.getElementById('portable-report-title');
   const portableReportSummaryEl = document.getElementById('portable-report-summary');
   const portableReportListEl = document.getElementById('portable-report-list');
+  const importModeMergeEl = document.getElementById('import-mode-merge');
+  const importModeReplaceEl = document.getElementById('import-mode-replace');
 
   function getBoardJsonPath() {
     const base = window.location.pathname.replace(/\/[^/]*$/, '') || '/';
-    return base + (base.endsWith('/') ? '' : '/') + 'boards/sample-board.json';
+    return base + (base.endsWith('/') ? '' : '/') + 'boards/from-blerp/board.json';
   }
 
   const CATEGORY_UI_KEY_PREFIX = 'soundboard-category-state:';
   const CATEGORY_ORDER_KEY_PREFIX = 'soundboard-category-order:';
   const AUTO_LEVEL_KEY = 'soundboard-auto-level';
-  const COMPRESSOR_KEY = 'soundboard-compressor';
   const LANGUAGE_KEY = 'soundboard-language';
   const THEME_KEY = 'soundboard-theme';
   const FAVOURITES_KEY_PREFIX = 'soundboard-favourites:';
@@ -101,6 +98,15 @@
   const FAVOURITES_ROWS_MAX = 4;
   const MAX_RECENT_SOUNDS = 20;
   const SETTINGS_BATCH_SIZE = 80;
+  const IMPORT_MODE_KEY = 'soundboard-import-mode';
+  const MASTER_VOLUME_KEY = 'soundboard-master-volume-pct';
+  const LAST_SAVE_ERROR_KEY = 'soundboard-last-save-error';
+  const SEARCH_RENDER_DEBOUNCE_MS = 150;
+  const REINIT_DEBOUNCE_MS = 300;
+  let searchRenderTimer = null;
+  let reinitTimer = null;
+  let reinitInProgress = false;
+  let lastSaveError = null;
   const I18N = {
     en: {
       'header.hint': 'Tip: click the board name to rename it.',
@@ -124,11 +130,14 @@
       'toolbar.exportPortableTitle': 'Export a .zip with board + audio + images (offline portable)',
       'toolbar.portableCheck': 'Portable readiness check',
       'toolbar.portableCheckTitle': 'Check if your board is ready for portable ZIP (offline) export',
+      'toolbar.reinitialize': 'Reinitialize sounds',
+      'toolbar.reinitializeTitle': 'Reload saved board and re-preload all audio (use if sounds stop working after switching apps)',
+      'toolbar.importMerge': 'Merge into board',
+      'toolbar.importReplace': 'Replace entire board',
       'toolbar.clearData': 'Clear All Data',
       'toolbar.clearDataTitle': 'Clear all saved board/app data and reset to defaults',
-      'toolbar.importFile': 'Import board file…',
-      'toolbar.importDropzone': 'Drop board JSON or portable ZIP here — or click to browse',
-      'toolbar.importDropzoneTitle': 'Import a .json board or portable .zip (board + audio + images)',
+      'toolbar.importDropzone': 'Import Sounds — drag .json or .zip here, or click',
+      'toolbar.importDropzoneTitle': 'Import sounds: merge or replace. Drop a .json or .zip board file, or click to choose.',
       'toolbar.group.audio': 'Audio Tools',
       'toolbar.downloadMedia': 'Download media',
       'toolbar.downloadMediaTitle': 'Download audio + images, save into the app, and update the board to use local copies',
@@ -159,15 +168,15 @@
       'help.en5': 'Use Reorder to drag sounds/categories into new positions.',
       'help.en6': 'Use Manage All Sounds for bulk editing and saving.',
       'help.hotkeysHeader': 'Useful Hotkeys for default sounds',
-      'help.hk1': '3 - Mario Kart 3-2-1 Go',
-      'help.hk2': 'X - Wrong answer buzzer',
-      'help.hk3': 'R - Great!',
-      'help.hk4': 'A - Anime Wow',
-      'help.hk5': '9 - Sad music',
-      'help.hk6': 'P - Perfect',
-      'help.hk7': 'M - Stop, wait a minute',
-      'help.hk8': 'V - Victory sound',
-      'help.hk9': '1 - One more Time',
+      'help.hk1': '3 - Mario Kart start race',
+      'help.hk2': 'X - Wrong Answer GameShow',
+      'help.hk3': 'G - Great',
+      'help.hk4': 'A - Anime wow',
+      'help.hk5': 'P - No no no no…',
+      'help.hk6': 'M - Stop! Wait-A-Minute-',
+      'help.hk7': 'Shift+W - You Win - Perfect',
+      'help.hk8': 'H - Heavens Choir',
+      'help.hk9': 'L - Hey Listen',
       'help.koHeader': 'Korean Guide',
       'help.koIntro': 'Korean instructions are shown below for bilingual users.',
       'help.ko1': 'You can switch app language at any time.',
@@ -181,12 +190,20 @@
       'search.hotkeysSuffix': ' hotkeys',
       'settings.loadedCount': 'Loaded {loaded} of {total} rows',
       'label.volume': 'Volume {pct}%',
+      'label.volumeBoost': 'Volume {pct}% (boost)',
       'status.noSoundsToAnalyze': 'No sounds to analyze.',
       'status.analysisUnavailable': 'Analysis not available.',
       'status.analyzingProgress': 'Analyzing {current}/{total}…',
       'status.analyzeComplete': 'Analyze complete.',
       'status.invalidImportFile': 'Please drop a valid .json or .zip board file.',
       'status.clearedAllData': 'All saved data cleared. Loaded default board.',
+      'status.mergedImport': 'Merged: {added} added, {skipped} skipped (duplicate IDs).',
+      'status.mergedImportHotkeys': 'Merged: {added} added, {skipped} skipped. {hotkeyConflicts} hotkey conflicts cleared.',
+      'status.reinitialized': 'Reinitialized — {count} sounds ready.',
+      'status.reinitializedMissing': 'Reinitialized — {missing} sound(s) missing local audio.',
+      'status.saveFailedHint': 'Save failed. Storage may be full — try Export Portable ZIP or Clear All Data.',
+      'status.nearQuotaHint': 'Board is large — consider Export Portable ZIP for backup.',
+      'status.audioResumeNeeded': 'Audio paused by browser — tap any sound or click Reinitialize.',
       'confirm.clearAllData': 'Clear all saved data (board, settings, local audio cache) and reset to defaults?',
       'board.defaultName': 'Soundboard',
       'board.renameTitle': 'Click to change board name',
@@ -227,11 +244,14 @@
       'toolbar.exportPortableTitle': '보드 + 오디오 + 이미지가 포함된 .zip 내보내기(오프라인용)',
       'toolbar.portableCheck': '휴대용 준비 상태 점검',
       'toolbar.portableCheckTitle': '보드가 휴대용 ZIP(오프라인) 내보내기 준비가 되었는지 점검',
+      'toolbar.reinitialize': '사운드 재초기화',
+      'toolbar.reinitializeTitle': '저장된 보드를 다시 불러오고 모든 오디오를 다시 준비합니다(앱 전환 후 사운드가 안 될 때)',
+      'toolbar.importMerge': '보드에 병합',
+      'toolbar.importReplace': '보드 전체 교체',
       'toolbar.clearData': '전체 데이터 삭제',
       'toolbar.clearDataTitle': '저장된 보드/앱 데이터를 모두 삭제하고 기본값으로 재설정',
-      'toolbar.importFile': '보드 파일 가져오기…',
-      'toolbar.importDropzone': 'JSON 또는 portable ZIP을 여기에 놓거나 클릭하세요',
-      'toolbar.importDropzoneTitle': '.json 보드 또는 portable .zip(오디오·이미지 포함) 가져오기',
+      'toolbar.importDropzone': '사운드 가져오기 — .json/.zip 드래그 또는 클릭',
+      'toolbar.importDropzoneTitle': '병합 또는 교체로 가져오기: .json/.zip 보드 파일을 드래그하거나 클릭하세요',
       'toolbar.group.audio': '오디오 도구',
       'toolbar.downloadMedia': '미디어 다운로드',
       'toolbar.downloadMediaTitle': '오디오 + 이미지를 다운로드해 앱에 저장하고 로컬 파일로 업데이트',
@@ -262,15 +282,15 @@
       'help.en5': 'Use Reorder to drag sounds/categories into new positions.',
       'help.en6': 'Use Manage All Sounds for bulk editing and saving.',
       'help.hotkeysHeader': '기본 사운드 유용한 단축키',
-      'help.hk1': '3 - Mario Kart 3-2-1 Go',
-      'help.hk2': 'X - 오답 버저',
-      'help.hk3': 'R - Great!',
-      'help.hk4': 'A - Anime Wow',
-      'help.hk5': '9 - 슬픈 음악',
-      'help.hk6': 'P - Perfect',
-      'help.hk7': 'M - Stop, wait a minute',
-      'help.hk8': 'V - 승리 사운드',
-      'help.hk9': '1 - One more Time',
+      'help.hk1': '3 - Mario Kart start race',
+      'help.hk2': 'X - Wrong Answer GameShow',
+      'help.hk3': 'G - Great',
+      'help.hk4': 'A - Anime wow',
+      'help.hk5': 'P - No no no no…',
+      'help.hk6': 'M - Stop! Wait-A-Minute-',
+      'help.hk7': 'Shift+W - You Win - Perfect',
+      'help.hk8': 'H - Heavens Choir',
+      'help.hk9': 'L - Hey Listen',
       'help.koHeader': '한국어 안내',
       'help.koIntro': '이 사운드보드는 사운드를 빠르게 재생하고 정리/관리할 수 있도록 만들어졌습니다.',
       'help.ko1': 'Add Sound 또는 Add Web Sound로 사운드를 추가하세요.',
@@ -284,12 +304,20 @@
       'search.hotkeysSuffix': ' 단축키',
       'settings.loadedCount': '{total}개 중 {loaded}개 로드됨',
       'label.volume': '볼륨 {pct}%',
+      'label.volumeBoost': '볼륨 {pct}% (부스트)',
       'status.noSoundsToAnalyze': '분석할 사운드가 없습니다.',
       'status.analysisUnavailable': '분석 기능을 사용할 수 없습니다.',
       'status.analyzingProgress': '{current}/{total} 분석 중…',
       'status.analyzeComplete': '분석 완료.',
       'status.invalidImportFile': '올바른 .json 또는 .zip 보드 파일을 드롭해 주세요.',
       'status.clearedAllData': '저장된 모든 데이터를 삭제하고 기본 보드를 불러왔습니다.',
+      'status.mergedImport': '병합됨: {added}개 추가, {skipped}개 건너뜀(중복 ID).',
+      'status.mergedImportHotkeys': '병합됨: {added}개 추가, {skipped}개 건너뜀. 단축키 충돌 {hotkeyConflicts}개 해제.',
+      'status.reinitialized': '재초기화됨 — {count}개 사운드 준비 완료.',
+      'status.reinitializedMissing': '재초기화됨 — 로컬 오디오 없음 {missing}개.',
+      'status.saveFailedHint': '저장 실패. 저장 공간이 부족할 수 있습니다 — 휴대용 ZIP 내보내기 또는 전체 데이터 삭제를 시도하세요.',
+      'status.nearQuotaHint': '보드 크기가 큽니다 — 휴대용 ZIP으로 백업하는 것을 권장합니다.',
+      'status.audioResumeNeeded': '브라우저가 오디오를 일시 중지했습니다 — 사운드를 탭하거나 재초기화를 누르세요.',
       'confirm.clearAllData': '저장된 모든 데이터(보드, 설정, 로컬 오디오 캐시)를 삭제하고 기본값으로 재설정할까요?',
       'board.defaultName': '사운드보드',
       'board.renameTitle': '클릭하여 보드 이름 변경',
@@ -369,7 +397,7 @@
     }
     if (globalVolumeEl && globalVolumeLabel) {
       const pct = parseInt(globalVolumeEl.value, 10);
-      globalVolumeLabel.textContent = t('label.volume', { pct: isNaN(pct) ? 100 : pct });
+      updateGlobalVolumeLabel(isNaN(pct) ? 100 : pct);
     }
     updateHotkeyOnlyButton();
     updateSearchCount((getFilteredSounds() || []).length, currentBoard && currentBoard.sounds ? currentBoard.sounds.length : 0);
@@ -411,7 +439,6 @@
     const isOpen = !!open;
     headerPopoutEl.hidden = !isOpen;
     headerToggleBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-    syncOverlayBodyLock();
   }
 
   function toggleHeaderPopout() {
@@ -433,14 +460,12 @@
     }
     portableReportEl.hidden = false;
     portableReportEl.setAttribute('aria-hidden', 'false');
-    syncOverlayBodyLock();
   }
 
   function closePortableReport() {
     if (!portableReportEl) return;
     portableReportEl.hidden = true;
     portableReportEl.setAttribute('aria-hidden', 'true');
-    syncOverlayBodyLock();
   }
 
   async function copyPortableReportToClipboard() {
@@ -1445,6 +1470,108 @@
     searchCountEl.textContent = String(count) + '/' + String(total) + suffix;
   }
 
+  function captureSearchFocusState() {
+    if (!searchInputEl || document.activeElement !== searchInputEl) {
+      return null;
+    }
+    return {
+      selStart: searchInputEl.selectionStart,
+      selEnd: searchInputEl.selectionEnd
+    };
+  }
+
+  function restoreSearchFocusState(state) {
+    if (!state || !searchInputEl) return;
+    focusWithoutScroll(searchInputEl);
+    try {
+      searchInputEl.setSelectionRange(state.selStart, state.selEnd);
+    } catch (_) {}
+  }
+
+  function scheduleSearchRender() {
+    if (searchRenderTimer) clearTimeout(searchRenderTimer);
+    searchRenderTimer = setTimeout(function () {
+      searchRenderTimer = null;
+      renderSearchResults();
+    }, SEARCH_RENDER_DEBOUNCE_MS);
+  }
+
+  function renderSearchResults() {
+    render();
+  }
+
+  function getImportMode() {
+    if (importModeReplaceEl && importModeReplaceEl.checked) return 'replace';
+    return 'merge';
+  }
+
+  function loadImportModePreference() {
+    try {
+      const saved = localStorage.getItem(IMPORT_MODE_KEY);
+      if (saved === 'replace') {
+        if (importModeReplaceEl) importModeReplaceEl.checked = true;
+        if (importModeMergeEl) importModeMergeEl.checked = false;
+      } else {
+        if (importModeMergeEl) importModeMergeEl.checked = true;
+        if (importModeReplaceEl) importModeReplaceEl.checked = false;
+      }
+    } catch (_) {}
+  }
+
+  function saveImportModePreference(mode) {
+    try {
+      localStorage.setItem(IMPORT_MODE_KEY, mode === 'replace' ? 'replace' : 'merge');
+    } catch (_) {}
+  }
+
+  function updateGlobalVolumeLabel(pct) {
+    if (!globalVolumeLabel) return;
+    const n = isNaN(pct) ? 100 : pct;
+    globalVolumeLabel.textContent = n > 100
+      ? t('label.volumeBoost', { pct: n })
+      : t('label.volume', { pct: n });
+    if (globalVolumeEl && globalVolumeEl.parentElement) {
+      globalVolumeEl.parentElement.title = n > 100
+        ? 'Master volume (boost mode — may clip on loud sounds)'
+        : 'Master volume';
+    }
+  }
+
+  function loadMasterVolumePreference() {
+    let pct = 100;
+    try {
+      const raw = localStorage.getItem(MASTER_VOLUME_KEY);
+      if (raw != null) {
+        const parsed = parseInt(raw, 10);
+        if (Number.isFinite(parsed)) pct = Math.max(0, Math.min(200, parsed));
+      }
+    } catch (_) {}
+    if (globalVolumeEl) globalVolumeEl.value = String(pct);
+    if (Audio && Audio.setMasterVolumeFromPercent) {
+      Audio.setMasterVolumeFromPercent(pct);
+    } else if (Audio && Audio.setMasterVolume) {
+      Audio.setMasterVolume(pct / 100);
+    }
+    updateGlobalVolumeLabel(pct);
+  }
+
+  function loadLastSaveErrorFlag() {
+    try {
+      lastSaveError = localStorage.getItem(LAST_SAVE_ERROR_KEY) === '1';
+    } catch (_) {
+      lastSaveError = false;
+    }
+  }
+
+  function setLastSaveErrorFlag(hasError) {
+    lastSaveError = !!hasError;
+    try {
+      if (hasError) localStorage.setItem(LAST_SAVE_ERROR_KEY, '1');
+      else localStorage.removeItem(LAST_SAVE_ERROR_KEY);
+    } catch (_) {}
+    updateStorageInfo();
+  }
+
   function updateHotkeyOnlyButton() {
     const btn = toolbarEl && toolbarEl.querySelector('[data-action="hotkey-only-toggle"]');
     const quickBtn = quickBarEl && quickBarEl.querySelector('[data-action="quick-hotkey-only"]');
@@ -1926,13 +2053,8 @@
 
   function shouldAnalyzeSound(sound) {
     if (!sound || !sound.fileUrl) return false;
-    const extra = sound.extra && typeof sound.extra === 'object' ? sound.extra : {};
-    const gain = extra.normGain;
-    const version = extra.normAlgoVersion;
-    const targetVersion = Audio && Audio.NORM_ALGO_VERSION ? Audio.NORM_ALGO_VERSION : 2;
-    if (!(typeof gain === 'number' && isFinite(gain))) return true;
-    if (version == null || version < targetVersion) return true;
-    return false;
+    const gain = sound.extra && typeof sound.extra === 'object' ? sound.extra.normGain : null;
+    return !(typeof gain === 'number' && isFinite(gain));
   }
 
   function runAutoAnalyzeOnLoad() {
@@ -1964,6 +2086,7 @@
 
   function render() {
     if (!UI || !gridEl) return;
+    const searchFocus = captureSearchFocusState();
     const allSounds = currentBoard ? currentBoard.sounds : [];
     const filtered = getFilteredSounds();
     const hotkeyCounts = getHotkeyCounts(allSounds);
@@ -1979,6 +2102,7 @@
       UI.renderGrid(gridEl, [], playingId, errorIds, onPlay, onEditSound, reorderMode, reorderSounds, sharedRenderOptions);
       updateHotkeyOnlyButton();
       updateReorderButton();
+      restoreSearchFocusState(searchFocus);
       return;
     }
 
@@ -2012,6 +2136,7 @@
     }
     updateHotkeyOnlyButton();
     updateReorderButton();
+    restoreSearchFocusState(searchFocus);
   }
 
   function reorderSounds(fromIndex, toIndex) {
@@ -2092,12 +2217,11 @@
       const has = sound.extra && typeof sound.extra.normGain === 'number' && isFinite(sound.extra.normGain);
       if (!has) {
         if (!sound.extra || typeof sound.extra !== 'object') sound.extra = {};
-        Audio.analyzeFileUrl(sound.fileUrl, sound).then(function (res) {
+        Audio.analyzeFileUrl(sound.fileUrl).then(function (res) {
           if (res && typeof res.gain === 'number' && isFinite(res.gain)) {
             sound.extra.normGain = res.gain;
             sound.extra.normAnalyzedAt = new Date().toISOString();
-            sound.extra.normAlgoVersion = res.algoVersion || (Audio.NORM_ALGO_VERSION || 2);
-            if (typeof res.lufs === 'number' && isFinite(res.lufs)) sound.extra.normLufs = res.lufs;
+            sound.extra.normAlgoVersion = res.algoVersion || 1;
             saveToStorage();
           }
         }).catch(function () {});
@@ -2117,7 +2241,10 @@
     }
     playingId = sound.id;
     render();
-    Audio.playSound(sound).then(async (played) => {
+    const playPromise = Audio.resumeContext
+      ? Audio.resumeContext().then(function () { return Audio.playSound(sound); })
+      : Audio.playSound(sound);
+    playPromise.then(async (played) => {
       if (!played) {
         errorIds.add(sound.id);
         if (UI && gridEl) UI.updateTileState(gridEl, sound.id, 'error');
@@ -2160,7 +2287,7 @@
     }
     if (mode === 'momentary-start' || sound.momentary) {
       if (playingId === sound.id) return;
-      startPlayback(sound, { squelch: false });
+      startPlayback(sound, { squelch: true });
       return;
     }
     if (playingId === sound.id) {
@@ -2202,30 +2329,39 @@
     // Also persist to the attached portable ZIP file, if any.
     scheduleFileModeWrite();
     lastSavePromise = Promise.resolve(Storage.saveBoard(currentBoard))
-      .then((location) => {
+      .then((result) => {
+        const location = result && typeof result === 'object' ? result.location : result;
+        const nearQuota = result && typeof result === 'object' ? !!result.nearQuota : false;
         console.info('[soundboard] save: success -> ' + location);
+        setLastSaveErrorFlag(false);
         if (location === 'idb' && downloadStatus) {
-          // Friendly note when we transition into IDB (typically because the
-          // board has grown beyond the localStorage quota).
           downloadStatus.textContent = 'Saved to local database.';
           setTimeout(function () {
             if (downloadStatus && downloadStatus.textContent === 'Saved to local database.') {
               downloadStatus.textContent = '';
             }
           }, 1800);
+        } else if (nearQuota && downloadStatus) {
+          downloadStatus.textContent = t('status.nearQuotaHint');
+          setTimeout(function () {
+            if (downloadStatus && downloadStatus.textContent === t('status.nearQuotaHint')) {
+              downloadStatus.textContent = '';
+            }
+          }, 4500);
         }
         updateStorageInfo();
         return location;
       })
       .catch((err) => {
         console.warn('[soundboard] save: FAILED', err);
+        setLastSaveErrorFlag(true);
         if (downloadStatus) {
-          downloadStatus.textContent = 'Save failed. Storage may be full or blocked.';
+          downloadStatus.textContent = t('status.saveFailedHint');
           setTimeout(function () {
-            if (downloadStatus && downloadStatus.textContent === 'Save failed. Storage may be full or blocked.') {
+            if (downloadStatus && downloadStatus.textContent === t('status.saveFailedHint')) {
               downloadStatus.textContent = '';
             }
-          }, 4000);
+          }, 5000);
         }
       });
     return lastSavePromise;
@@ -2237,7 +2373,9 @@
       const location = Storage && Storage.getBoardLocation ? Storage.getBoardLocation() : 'local';
       const soundCount = currentBoard && Array.isArray(currentBoard.sounds) ? currentBoard.sounds.length : 0;
       const locationLabel = location === 'idb' ? 'IndexedDB' : 'browser storage';
-      storageInfoEl.textContent = 'Saved to ' + locationLabel + ' \u00b7 ' + soundCount + ' sound' + (soundCount === 1 ? '' : 's') + '.';
+      let text = 'Saved to ' + locationLabel + ' \u00b7 ' + soundCount + ' sound' + (soundCount === 1 ? '' : 's') + '.';
+      if (lastSaveError) text += ' Last save failed.';
+      storageInfoEl.textContent = text;
     } catch (err) {
       console.warn('soundboard: updateStorageInfo failed', err);
     }
@@ -2261,16 +2399,28 @@
   // Make sure the last edit is persisted before the user navigates away.
   if (typeof window !== 'undefined') {
     window.addEventListener('beforeunload', function () {
-      if (savePending) {
-        // Synchronous-ish: we still call saveToStorageNow, but Storage.saveBoard
-        // will at least attempt localStorage synchronously (the IDB fallback
-        // promise may not finish before unload — acceptable since it began).
-        try { saveToStorageNow(); } catch (err) { console.warn('soundboard: flush on unload failed', err); }
-      }
+      try { flushSaveToStorage(); } catch (err) { console.warn('soundboard: flush on unload failed', err); }
     });
     window.addEventListener('pagehide', function () {
-      if (savePending) {
-        try { saveToStorageNow(); } catch (err) { console.warn('soundboard: flush on pagehide failed', err); }
+      try { flushSaveToStorage(); } catch (err) { console.warn('soundboard: flush on pagehide failed', err); }
+    });
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'hidden') {
+        try { flushSaveToStorage(); } catch (err) { console.warn('soundboard: flush on hidden failed', err); }
+      } else if (document.visibilityState === 'visible') {
+        scheduleReinitializeApp({ auto: true });
+      }
+    });
+    window.addEventListener('pageshow', function (e) {
+      if (e && e.persisted) scheduleReinitializeApp({ auto: true, reloadBoard: true });
+    });
+    window.addEventListener('focus', function () {
+      scheduleReinitializeApp({ auto: true });
+    });
+    window.addEventListener('soundboard-audio-state', function (e) {
+      const state = e && e.detail ? e.detail.state : '';
+      if (state === 'suspended' && downloadStatus) {
+        downloadStatus.textContent = t('status.audioResumeNeeded');
       }
     });
   }
@@ -2317,36 +2467,7 @@
     const modalOpen = !!(modalEl && !modalEl.hidden);
     const settingsOpen = !!(settingsScreenEl && !settingsScreenEl.hidden);
     const helpOpen = !!(helpScreenEl && !helpScreenEl.hidden);
-    const popoutOpen = !!(headerPopoutEl && !headerPopoutEl.hidden);
-    const reportOpen = !!(portableReportEl && !portableReportEl.hidden);
-    document.body.classList.toggle('body--overlay-open', modalOpen || settingsOpen || helpOpen || popoutOpen || reportOpen);
-  }
-
-  function initVisualViewport() {
-    if (!window.visualViewport || !document.documentElement) return;
-    function update() {
-      const vv = window.visualViewport;
-      const root = document.documentElement;
-      root.style.setProperty('--visual-viewport-height', vv.height + 'px');
-      root.style.setProperty('--visual-viewport-offset-top', vv.offsetTop + 'px');
-    }
-    update();
-    window.visualViewport.addEventListener('resize', update);
-    window.visualViewport.addEventListener('scroll', update);
-    if (modalForm) {
-      modalForm.addEventListener('focusin', function (e) {
-        const t = e.target;
-        if (!t || !t.classList || !t.classList.contains('field__input')) return;
-        if (!modalEl || modalEl.hidden) return;
-        window.requestAnimationFrame(function () {
-          try {
-            t.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-          } catch (_) {
-            try { t.scrollIntoView(true); } catch (_2) {}
-          }
-        });
-      });
-    }
+    document.body.classList.toggle('body--overlay-open', modalOpen || settingsOpen || helpOpen);
   }
 
   function focusWithoutScroll(el) {
@@ -2360,7 +2481,6 @@
 
   function openModal(sound) {
     if (!modalEl || !modalForm) return;
-    setHeaderPopoutOpen(false);
     modalEl.dataset.soundId = sound ? sound.id : '';
     const uploadInput = document.getElementById('upload-audio-input');
     const uploadedHint = document.getElementById('uploaded-audio-hint');
@@ -2398,6 +2518,7 @@
       modalForm.querySelector('[name="startSec"]').value = startSec === '' ? '' : String(Number(startSec.toFixed(2)));
       modalForm.querySelector('[name="endSec"]').value = endSec === '' ? '' : String(Number(endSec.toFixed(2)));
       updateVolumePercent(volPct);
+      populateTempoFieldsFromSound(sound);
     }
     if (durationHint) durationHint.textContent = '';
     if (sound && sound.fileUrl && Audio && Audio.getDurationSeconds) {
@@ -2405,6 +2526,9 @@
       if (sec != null) durationHint.textContent = 'Duration: ' + sec.toFixed(1) + 's';
     }
     updateTrimBar(sound && sound.fileUrl && Audio && Audio.getDurationSeconds ? Audio.getDurationSeconds(sound.fileUrl) : null);
+    if (sound && getModalAudioFileUrl() && !getModalDetectedBpm()) {
+      runDetectTempoForModal().catch(function () {});
+    }
     modalEl.classList.add('modal--open');
     modalEl.hidden = false;
     syncOverlayBodyLock();
@@ -2525,7 +2649,211 @@
     if (el) el.textContent = rate == null ? '1.0' : Number(rate).toFixed(1);
   }
 
+  let previewTapPhase = 'in';
+
+  function getModalAudioFileUrl() {
+    if (!modalForm) return '';
+    const pending = modalForm.dataset && modalForm.dataset.pendingBlobId;
+    if (pending) return 'local:' + pending;
+    const original = modalForm.dataset && modalForm.dataset.originalLocalFileUrl;
+    if (original && String(original).startsWith('local:')) return String(original).trim();
+    return (modalForm.querySelector('[name="fileUrl"]').value || '').trim();
+  }
+
+  function getModalDetectedBpm() {
+    if (!modalForm) return null;
+    const el = modalForm.querySelector('[name="detectedBpm"]');
+    if (!el) return null;
+    const n = parseFloat(String(el.value || '').trim());
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+
+  function updatePitchSemitoneLabel(n) {
+    const el = document.getElementById('pitch-semitone-label');
+    if (el) el.textContent = String(Number.isFinite(n) ? n : 0);
+  }
+
+  function setTapTrimStatus(msg) {
+    const el = document.getElementById('tap-trim-status');
+    if (el) el.textContent = msg || '';
+  }
+
+  function populateTempoFieldsFromSound(sound) {
+    if (!modalForm) return;
+    const extra = sound && sound.extra && typeof sound.extra === 'object' ? sound.extra : {};
+    const detected = extra.detectedBpm != null ? extra.detectedBpm : extra.bpm;
+    const project = extra.projectBpm;
+    const pitch = extra.pitchSemitones != null ? Number(extra.pitchSemitones) : 0;
+    const detEl = modalForm.querySelector('[name="detectedBpm"]');
+    const projEl = modalForm.querySelector('[name="projectBpm"]');
+    const pitchEl = modalForm.querySelector('[name="pitchSemitones"]');
+    if (detEl) detEl.value = detected != null && detected !== '' ? String(detected) : '';
+    if (projEl) projEl.value = project != null && project !== '' ? String(project) : '';
+    if (pitchEl) pitchEl.value = String(Math.max(-12, Math.min(12, Number.isFinite(pitch) ? pitch : 0)));
+    updatePitchSemitoneLabel(parseInt(pitchEl ? pitchEl.value : '0', 10));
+    setTapTrimStatus('');
+    previewTapPhase = 'in';
+  }
+
+  function readTempoExtraFromModal() {
+    const extra = {};
+    const detEl = modalForm && modalForm.querySelector('[name="detectedBpm"]');
+    const projEl = modalForm && modalForm.querySelector('[name="projectBpm"]');
+    const pitchEl = modalForm && modalForm.querySelector('[name="pitchSemitones"]');
+    const detRaw = detEl ? String(detEl.value || '').trim() : '';
+    const projRaw = projEl ? String(projEl.value || '').trim() : '';
+    const det = parseFloat(detRaw);
+    const proj = parseFloat(projRaw);
+    const pitch = pitchEl ? parseInt(pitchEl.value, 10) : 0;
+    if (detRaw !== '' && Number.isFinite(det) && det > 0) extra.detectedBpm = det;
+    if (projRaw !== '' && Number.isFinite(proj) && proj > 0) extra.projectBpm = proj;
+    if (Number.isFinite(pitch)) extra.pitchSemitones = pitch;
+    if (extra.detectedBpm && extra.projectBpm) extra.tempoSynced = true;
+    return extra;
+  }
+
+  function mergeSoundExtra(existing, patch) {
+    const base = existing && typeof existing === 'object' ? Object.assign({}, existing) : {};
+    ['detectedBpm', 'projectBpm', 'pitchSemitones', 'tempoSynced', 'bpm'].forEach((k) => {
+      delete base[k];
+    });
+    Object.keys(patch || {}).forEach((k) => {
+      if (patch[k] != null && patch[k] !== '') base[k] = patch[k];
+    });
+    return base;
+  }
+
+  function snapModalSec(sec) {
+    const bpm = getModalDetectedBpm();
+    const Tempo = window.SoundboardTempo;
+    if (!bpm || !Tempo || !Tempo.snapSecToBeat) return sec;
+    return Tempo.snapSecToBeat(sec, bpm, 0);
+  }
+
+  function buildPreviewSoundFromModal() {
+    const fileUrl = getModalAudioFileUrl();
+    const volPct = parseFloat(modalForm.querySelector('[name="volume"]').value);
+    const startSecRaw = modalForm.querySelector('[name="startSec"]').value.trim();
+    const endSecRaw = modalForm.querySelector('[name="endSec"]').value.trim();
+    const startMs = startSecRaw === '' ? null : Math.round(parseFloat(startSecRaw) * 1000);
+    const endMs = endSecRaw === '' ? null : Math.round(parseFloat(endSecRaw) * 1000);
+    const rateRaw = parseFloat(modalForm.querySelector('[name="playbackRate"]').value);
+    const playbackRate = isNaN(rateRaw) ? 1 : Math.max(0.5, Math.min(2, rateRaw));
+    const loopCheck = modalForm.querySelector('[name="loop"]');
+    const momentaryCheck = modalForm.querySelector('[name="momentary"]');
+    return {
+      id: 'preview',
+      title: 'Preview',
+      fileUrl,
+      volume: isNaN(volPct) ? 1 : Math.max(0, Math.min(1, volPct / 100)),
+      playbackRate,
+      loop: true,
+      momentary: momentaryCheck ? momentaryCheck.checked : false,
+      startMs,
+      endMs,
+      extra: readTempoExtraFromModal()
+    };
+  }
+
+  function handlePreviewTapTrim() {
+    if (!Audio || !Audio.isPreviewPlaying || !Audio.isPreviewPlaying()) return false;
+    const pos = Audio.getPreviewPlaybackSec();
+    if (pos == null || !modalForm) return false;
+    const snapped = snapModalSec(pos);
+    const startInput = modalForm.querySelector('[name="startSec"]');
+    const endInput = modalForm.querySelector('[name="endSec"]');
+    const wrap = document.getElementById('trim-bar-wrap');
+    const duration = wrap ? parseFloat(wrap.dataset.durationSec) : null;
+    const dur = duration || (Audio.getDurationSeconds ? Audio.getDurationSeconds(getModalAudioFileUrl()) : null);
+
+    if (previewTapPhase === 'in') {
+      startInput.value = snapped.toFixed(2);
+      if (!endInput.value || parseFloat(endInput.value) <= snapped) {
+        endInput.value = dur != null ? dur.toFixed(2) : snapped.toFixed(2);
+      }
+      previewTapPhase = 'out';
+      setTapTrimStatus('In: ' + snapped.toFixed(2) + 's — press a number key again for out.');
+    } else {
+      let outSec = snapModalSec(pos);
+      const startSec = parseFloat(startInput.value) || 0;
+      if (outSec <= startSec) outSec = startSec + 0.05;
+      if (dur != null) outSec = Math.min(dur, outSec);
+      endInput.value = outSec.toFixed(2);
+      previewTapPhase = 'in';
+      setTapTrimStatus('Out: ' + outSec.toFixed(2) + 's — range saved on the trim bar.');
+      if (Audio.stopSound) Audio.stopSound('preview');
+    }
+    updateTrimBar(dur);
+    return true;
+  }
+
+  async function runDetectTempoForModal() {
+    const fileUrl = getModalAudioFileUrl();
+    if (!fileUrl || !Audio || !Audio.detectTempoForUrl) {
+      setTapTrimStatus('Load audio first, then detect tempo.');
+      return;
+    }
+    setTapTrimStatus('Detecting tempo…');
+    try {
+      const bpm = await Audio.detectTempoForUrl(fileUrl);
+      if (bpm) {
+        const detEl = modalForm.querySelector('[name="detectedBpm"]');
+        const projEl = modalForm.querySelector('[name="projectBpm"]');
+        if (detEl) detEl.value = String(bpm);
+        if (projEl && !String(projEl.value || '').trim()) projEl.value = String(bpm);
+        setTapTrimStatus('Detected ' + bpm + ' BPM — in/out points snap to beats.');
+      } else {
+        setTapTrimStatus('Could not detect BPM (try manual entry).');
+      }
+    } catch (e) {
+      console.warn('tempo detect failed', e);
+      setTapTrimStatus('Tempo detection failed.');
+    }
+  }
+
+  async function autoSyncTempoForSound(sound) {
+    if (!sound || !sound.fileUrl || !Audio || !Audio.detectTempoForUrl) return false;
+    const extra = sound.extra && typeof sound.extra === 'object' ? sound.extra : {};
+    if (extra.detectedBpm != null || extra.bpm != null) return false;
+    try {
+      const bpm = await Audio.detectTempoForUrl(sound.fileUrl);
+      if (!bpm) return false;
+      if (!sound.extra || typeof sound.extra !== 'object') sound.extra = {};
+      sound.extra.detectedBpm = bpm;
+      sound.extra.projectBpm = bpm;
+      sound.extra.tempoSynced = true;
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function autoSyncImportedSounds(board) {
+    if (!board || !Array.isArray(board.sounds)) return;
+    const targets = board.sounds.filter((s) => s && s.fileUrl);
+    if (!targets.length) return;
+    let i = 0;
+    function step() {
+      if (i >= targets.length) {
+        saveToStorage();
+        if (downloadStatus) {
+          downloadStatus.textContent = 'Tempo sync finished for imported sounds.';
+          setTimeout(function () { if (downloadStatus) downloadStatus.textContent = ''; }, 3500);
+        }
+        return;
+      }
+      const s = targets[i];
+      i += 1;
+      if (downloadStatus) downloadStatus.textContent = 'Tempo sync ' + i + '/' + targets.length + '…';
+      autoSyncTempoForSound(s).finally(step);
+    }
+    step();
+  }
+
   function closeModal() {
+    if (Audio && Audio.stopSound) Audio.stopSound('preview');
+    previewTapPhase = 'in';
+    setTapTrimStatus('');
     if (modalEl) {
       modalEl.classList.remove('modal--open');
       modalEl.hidden = true;
@@ -2539,7 +2867,6 @@
 
   function openSettingsScreen() {
     if (!settingsScreenEl || !settingsListEl || !currentBoard) return;
-    setHeaderPopoutOpen(false);
     if (!settingsScreenEl.hidden) {
       focusWithoutScroll(settingsSearchEl);
       return;
@@ -2583,7 +2910,6 @@
 
   function openHelpScreen() {
     if (!helpScreenEl) return;
-    setHeaderPopoutOpen(false);
     helpScreenEl.hidden = false;
     helpScreenEl.setAttribute('aria-hidden', 'false');
     syncOverlayBodyLock();
@@ -2967,7 +3293,12 @@
         modalForm.querySelector('[name="fileUrl"]').value = '';
         if (uploadedHint) uploadedHint.textContent = 'Uploaded: ' + (file.name || 'file');
         var localUrl = 'local:' + blobId;
-        if (Audio && Audio.loadBuffer) Audio.loadBuffer(localUrl).then(function () { updateTrimBar(); });
+        if (Audio && Audio.loadBuffer) {
+          Audio.loadBuffer(localUrl).then(function () {
+            updateTrimBar();
+            runDetectTempoForModal().catch(function () {});
+          });
+        }
       }).catch(function () {
         if (uploadedHint) uploadedHint.textContent = 'Upload failed.';
       });
@@ -3034,6 +3365,7 @@
       return;
     }
     const rawImageUrl = (modalForm.querySelector('[name="imageUrl"]').value || '').trim();
+    const tempoExtra = readTempoExtraFromModal();
     if (sound) {
       sound.title = title;
       sound.fileUrl = fileUrl;
@@ -3046,6 +3378,7 @@
       sound.momentary = momentary;
       sound.startMs = startMs;
       sound.endMs = endMs;
+      sound.extra = mergeSoundExtra(sound.extra, tempoExtra);
     } else {
       sound = Board.normalizeSound({
         id: Board.generateId(),
@@ -3062,7 +3395,7 @@
         endMs,
         hotkey,
         color: '#6b7280',
-        extra: {}
+        extra: tempoExtra
       });
       currentBoard.sounds.push(sound);
     }
@@ -3288,16 +3621,86 @@
     }
   }
 
+  function showMergeImportStatus(stats) {
+    if (!stats || !downloadStatus) return;
+    const msg = stats.hotkeyConflicts > 0
+      ? t('status.mergedImportHotkeys', stats)
+      : t('status.mergedImport', stats);
+    downloadStatus.textContent = msg;
+    setTimeout(function () {
+      if (downloadStatus && downloadStatus.textContent === msg) downloadStatus.textContent = '';
+    }, 4500);
+  }
+
+  function finishBoardImport(incomingBoard, options) {
+    if (!incomingBoard) return;
+    const opts = options && typeof options === 'object' ? options : {};
+    const fromFileMode = !!opts.fromFileMode;
+    const mode = fromFileMode ? 'replace' : getImportMode();
+    let boardToSet = incomingBoard;
+    let mergeStats = null;
+
+    if (mode === 'merge' && currentBoard && Board.mergeBoards) {
+      const merged = Board.mergeBoards(currentBoard, incomingBoard, { duplicateStrategy: 'skip' });
+      boardToSet = merged.board;
+      mergeStats = merged.stats;
+    }
+
+    setBoard(boardToSet);
+    const canPersistAudio = opts.canPersistAudio !== false;
+    if (canPersistAudio) saveToStorageNow();
+    if (fromFileMode) {
+      fileModeWritePending = false;
+      if (fileModeWriteTimer) { clearTimeout(fileModeWriteTimer); fileModeWriteTimer = null; }
+    }
+    if (Audio && Audio.clearCache) Audio.clearCache();
+    if (Audio && Audio.preloadSounds && boardToSet.sounds) {
+      Audio.preloadSounds(boardToSet.sounds, boardToSet.sounds.length);
+    }
+
+    const warnings = Array.isArray(opts.warnings) ? opts.warnings : [];
+    if (warnings.length) {
+      openPortableReport('Portable import warnings', 'Some files referenced in the board could not be found in the ZIP.', warnings);
+    }
+    if (mergeStats) {
+      showMergeImportStatus(mergeStats);
+    } else if (downloadStatus) {
+      const msg = warnings.length ? 'Portable ZIP imported (with warnings).' : (mode === 'merge' ? 'Import complete.' : 'Board replaced from import.');
+      downloadStatus.textContent = msg;
+      setTimeout(function () { if (downloadStatus && downloadStatus.textContent === msg) downloadStatus.textContent = ''; }, warnings.length ? 4500 : 2500);
+    }
+    autoSyncImportedSounds(boardToSet);
+  }
+
   async function importPortableZip(file, options) {
     if (!file) return;
-    const fromFileMode = !!(options && options.fromFileMode);
+    if (downloadStatus) downloadStatus.textContent = 'Reading zip…';
+    try {
+      const parsed = await parsePortableZipFile(file);
+      if (!parsed) return;
+      finishBoardImport(parsed.board, {
+        fromFileMode: !!(options && options.fromFileMode),
+        warnings: parsed.warnings,
+        canPersistAudio: parsed.canPersistAudio
+      });
+    } catch (e) {
+      alert('Invalid ZIP file.');
+      console.warn('zip import failed', e);
+    } finally {
+      if (downloadStatus && downloadStatus.textContent === 'Reading zip…') {
+        downloadStatus.textContent = '';
+      }
+    }
+  }
+
+  async function parsePortableZipFile(file) {
+    if (!file) return null;
     if (!window.JSZip) {
       alert('ZIP import not available (JSZip missing).');
-      return;
+      return null;
     }
     const LocalAudio = window.SoundboardLocalAudio;
     const canPersistAudio = !!(LocalAudio && LocalAudio.putBlob);
-    setAppStatus('Reading zip…');
     const buf = await (file.arrayBuffer ? file.arrayBuffer() : new Promise((resolve, reject) => {
       const r = new FileReader();
       r.onload = () => resolve(r.result);
@@ -3308,26 +3711,24 @@
     const boardFile = zip.file('board.json');
     if (!boardFile) {
       alert('ZIP missing board.json');
-      return;
+      return null;
     }
     const boardText = await boardFile.async('text');
     const parsed = JSON.parse(boardText);
     const result = Board.validateBoard(parsed);
     if (!result.ok) {
       alert('Invalid board in ZIP: ' + (result.error || 'unknown'));
-      return;
+      return null;
     }
     const board = Board.normalizeBoard(parsed);
     const sounds = Array.isArray(board.sounds) ? board.sounds : [];
     const importNonce = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
     const warnings = [];
-    let importedAudioCount = 0;
     let i = 0;
     for (const s of sounds) {
       i++;
       if (downloadStatus) downloadStatus.textContent = 'Importing ' + i + '/' + sounds.length + '…';
 
-      // Audio from zip:
       const fu = String(s.fileUrl || '');
       if (fu.startsWith('zip:')) {
         const path = fu.slice(4);
@@ -3344,13 +3745,11 @@
             s.fileUrl = blobUrl;
             warnings.push('Audio is loaded for this session only (no IndexedDB): ' + (s.title || s.id));
           }
-          importedAudioCount++;
         } else {
           warnings.push('Missing audio in zip: ' + path);
         }
       }
 
-      // Image from zip -> embed as data URL:
       const iu = String(s.imageUrl || '');
       if (iu.startsWith('zip:')) {
         const path = iu.slice(4);
@@ -3379,25 +3778,114 @@
       }
     }
 
-    setBoard(board);
-    // Only persist when audio is persistable; otherwise we would save blob: URLs that break on refresh.
-    // When we're loading from the attached file (fromFileMode), we still
-    // persist to localStorage/IDB so the in-session save path is consistent.
-    if (canPersistAudio) saveToStorageNow();
-    if (fromFileMode) {
-      // Skip writing back to the file we just read (avoid noisy round-trips).
-      fileModeWritePending = false;
-      if (fileModeWriteTimer) { clearTimeout(fileModeWriteTimer); fileModeWriteTimer = null; }
+    return { board, warnings, canPersistAudio };
+  }
+
+  async function verifySoundAssets(board) {
+    const warnings = [];
+    if (!board || !Array.isArray(board.sounds)) return { missingAudio: 0, warnings };
+    const LocalAudio = window.SoundboardLocalAudio;
+    for (const s of board.sounds) {
+      const fileUrl = String((s && s.fileUrl) || '').trim();
+      if (!fileUrl.startsWith('local:')) continue;
+      if (!LocalAudio || !LocalAudio.getBlob) {
+        warnings.push(String(s.title || s.id));
+        continue;
+      }
+      try {
+        const buf = await LocalAudio.getBlob(fileUrl.slice(6));
+        if (!buf) warnings.push(String(s.title || s.id));
+      } catch (_) {
+        warnings.push(String(s.title || s.id));
+      }
     }
-    if (Audio && Audio.clearCache) Audio.clearCache();
-    render();
-    if (warnings.length) {
-      openPortableReport('Portable import warnings', 'Some files referenced in the board could not be found in the ZIP.', warnings);
+    return { missingAudio: warnings.length, warnings };
+  }
+
+  function scheduleReinitializeApp(options) {
+    if (reinitTimer) clearTimeout(reinitTimer);
+    reinitTimer = setTimeout(function () {
+      reinitTimer = null;
+      reinitializeApp(options || { auto: true }).catch(function (err) {
+        console.warn('[soundboard] reinitialize failed', err);
+      });
+    }, REINIT_DEBOUNCE_MS);
+  }
+
+  async function reinitializeApp(options) {
+    if (reinitInProgress) return;
+    const opts = options && typeof options === 'object' ? options : {};
+    reinitInProgress = true;
+    try {
+      await flushSaveToStorage();
+
+      if (Audio && Audio.reinitializeAudio) {
+        const audioResult = await Audio.reinitializeAudio({ clearCache: true });
+        if (audioResult && !audioResult.resumed && audioResult.state === 'suspended' && downloadStatus) {
+          downloadStatus.textContent = t('status.audioResumeNeeded');
+        }
+      }
+
+      const boardEmpty = !currentBoard || !Array.isArray(currentBoard.sounds) || currentBoard.sounds.length === 0;
+      if (boardEmpty || opts.reloadBoard || opts.manual) {
+        const saved = Storage && Storage.loadBoardLatest
+          ? await Storage.loadBoardLatest()
+          : (Storage && Storage.loadBoard ? Storage.loadBoard() : null);
+        if (saved && Board.validateBoard(saved).ok) {
+          setBoard(Board.normalizeBoard(saved));
+        } else if (boardEmpty) {
+          loadFromStorageOrSample();
+        }
+      }
+
+      errorIds.clear();
+      playingId = null;
+      if (Audio && Audio.stopSound) Audio.stopSound();
+
+      const sounds = currentBoard && Array.isArray(currentBoard.sounds) ? currentBoard.sounds : [];
+      if (sounds.length && Audio && Audio.preloadAllSounds) {
+        if (downloadStatus && (opts.manual || sounds.length > 20)) {
+          downloadStatus.textContent = 'Reinitializing audio 0/' + sounds.length + '…';
+        }
+        let loaded = 0;
+        for (const s of sounds) {
+          if (s && s.fileUrl && Audio.loadBuffer) {
+            await Audio.loadBuffer(s.fileUrl);
+          }
+          loaded++;
+          if (downloadStatus && (opts.manual || sounds.length > 20) && loaded % 10 === 0) {
+            downloadStatus.textContent = 'Reinitializing audio ' + loaded + '/' + sounds.length + '…';
+          }
+        }
+      } else if (Audio && Audio.preloadSounds && sounds.length) {
+        Audio.preloadSounds(sounds, sounds.length);
+      }
+
+      prewarmLocalImages(sounds);
+      await refreshFileModeStatus();
+
+      const verify = await verifySoundAssets(currentBoard);
+      render();
+
+      if (opts.manual || !opts.auto) {
+        if (downloadStatus) {
+          const msg = verify.missingAudio > 0
+            ? t('status.reinitializedMissing', { missing: verify.missingAudio })
+            : t('status.reinitialized', { count: sounds.length });
+          downloadStatus.textContent = msg;
+          setTimeout(function () {
+            if (downloadStatus && downloadStatus.textContent === msg) downloadStatus.textContent = '';
+          }, 4500);
+        }
+      } else if (verify.missingAudio > 0 && downloadStatus) {
+        downloadStatus.textContent = t('status.reinitializedMissing', { missing: verify.missingAudio });
+        setTimeout(function () {
+          if (downloadStatus && downloadStatus.textContent.indexOf('missing') !== -1) downloadStatus.textContent = '';
+        }, 3500);
+      }
+    } finally {
+      reinitInProgress = false;
     }
-    setAppStatus(
-      warnings.length ? 'Portable ZIP imported (with warnings).' : 'Portable ZIP imported.',
-      { autoClearMs: warnings.length ? 4500 : 2500 }
-    );
   }
 
   async function runPortableReadinessCheck() {
@@ -3682,34 +4170,21 @@
 
   function previewFromModal() {
     if (!modalForm || !Audio) return;
-    const fileUrl = (modalForm.querySelector('[name="fileUrl"]').value || '').trim();
+    const fileUrl = getModalAudioFileUrl();
     if (!fileUrl) {
-      if (modalError) modalError.textContent = 'Enter an audio URL to preview.';
+      if (modalError) modalError.textContent = 'Enter an audio URL or upload a file to preview.';
       return;
     }
-    const volPct = parseFloat(modalForm.querySelector('[name="volume"]').value);
-    const startSecRaw = modalForm.querySelector('[name="startSec"]').value.trim();
-    const endSecRaw = modalForm.querySelector('[name="endSec"]').value.trim();
-    const startMs = startSecRaw === '' ? null : Math.round(parseFloat(startSecRaw) * 1000);
-    const endMs = endSecRaw === '' ? null : Math.round(parseFloat(endSecRaw) * 1000);
-    const rateRaw = parseFloat(modalForm.querySelector('[name="playbackRate"]').value);
-    const playbackRate = isNaN(rateRaw) ? 1 : Math.max(0.5, Math.min(2, rateRaw));
-    const loopCheck = modalForm.querySelector('[name="loop"]');
-    const loop = loopCheck ? loopCheck.checked : false;
-    const momentaryCheck = modalForm.querySelector('[name="momentary"]');
-    const momentary = momentaryCheck ? momentaryCheck.checked : false;
-    const temp = {
-      id: 'preview',
-      title: 'Preview',
-      fileUrl,
-      volume: isNaN(volPct) ? 1 : Math.max(0, Math.min(1, volPct / 100)),
-      playbackRate,
-      loop,
-      momentary,
-      startMs,
-      endMs
-    };
-    Audio.playSound(temp);
+    previewTapPhase = 'in';
+    setTapTrimStatus('Playing — press a number key for in, then again for out.');
+    const temp = buildPreviewSoundFromModal();
+    temp.fileUrl = fileUrl;
+    temp.loop = true;
+    if (Audio.playPreviewSound) {
+      Audio.playPreviewSound(temp, { loop: true });
+    } else {
+      Audio.playSound(temp);
+    }
     if (modalError) modalError.textContent = '';
   }
 
@@ -3734,7 +4209,6 @@
       importPortableZip(file).catch(function (e) {
         alert('Invalid ZIP file.');
         console.warn('zip import failed', e);
-        setAppStatus('');
       });
       return;
     }
@@ -3747,13 +4221,9 @@
           alert('Invalid board format: ' + (result.error || 'unknown'));
           return;
         }
-        setBoard(Board.normalizeBoard(data));
-        saveToStorageNow();
-        const n = currentBoard && currentBoard.sounds ? currentBoard.sounds.length : 0;
-        setAppStatus('Imported board (' + n + ' sound' + (n === 1 ? '' : 's') + ').', { autoClearMs: 3000 });
+        finishBoardImport(Board.normalizeBoard(data), { canPersistAudio: true });
       } catch (e) {
         alert('Invalid JSON file.');
-        setAppStatus('');
       }
     };
     reader.readAsText(file);
@@ -3798,16 +4268,28 @@
           || k.startsWith('soundboard-category-order:')
           || k.startsWith(FAVOURITES_KEY_PREFIX)
           || k.startsWith(RECENTS_KEY_PREFIX)
+          || k.startsWith(QUICK_ACCESS_COLLAPSED_KEY_PREFIX)
           || k === AUTO_LEVEL_KEY
-          || k === COMPRESSOR_KEY
           || k === LANGUAGE_KEY
+          || k === THEME_KEY
+          || k === FAVOURITES_ROWS_KEY
+          || k === RECENTS_ROWS_KEY
+          || k === IMPORT_MODE_KEY
+          || k === MASTER_VOLUME_KEY
+          || k === LAST_SAVE_ERROR_KEY
         )) {
           keysToDelete.push(k);
         }
       }
       keysToDelete.forEach((k) => localStorage.removeItem(k));
     } catch (_) {}
-    clearLocalAudioDatabase().finally(function () {
+    const detachFile = window.SoundboardFileMode && window.SoundboardFileMode.detach
+      ? window.SoundboardFileMode.detach()
+      : Promise.resolve();
+    const clearImages = window.SoundboardLocalImages && window.SoundboardLocalImages.clearAll
+      ? window.SoundboardLocalImages.clearAll()
+      : Promise.resolve();
+    Promise.all([clearLocalAudioDatabase(), clearImages, detachFile]).finally(function () {
       if (Audio && Audio.clearCache) Audio.clearCache();
       const url = getBoardJsonPath();
       fetch(url, { cache: 'no-store' })
@@ -3871,41 +4353,34 @@
     });
   }
 
-  function setAppStatus(message, options) {
-    const text = message != null ? String(message) : '';
-    const autoClearMs = options && options.autoClearMs != null ? options.autoClearMs : 0;
-    if (importBarStatusEl) importBarStatusEl.textContent = text;
-    if (downloadStatus) downloadStatus.textContent = text;
-    if (autoClearMs > 0 && text) {
-      setTimeout(function () {
-        if (importBarStatusEl && importBarStatusEl.textContent === text) importBarStatusEl.textContent = '';
-        if (downloadStatus && downloadStatus.textContent === text) downloadStatus.textContent = '';
-      }, autoClearMs);
-    }
-  }
-
-  function initImportDropzone() {
-    if (!importDropzoneEl || !importInput) return;
-
-    const dropTargets = mainContentEl ? [mainContentEl] : [importDropzoneEl];
-    let fileDragDepth = 0;
+  function initImportFileDrop() {
+    if (!importInput) return;
 
     function hasFileDrag(e) {
-      const types = e && e.dataTransfer && e.dataTransfer.types ? Array.from(e.dataTransfer.types) : [];
-      return types.includes('Files');
+      if (!e || !e.dataTransfer) return false;
+      const dt = e.dataTransfer;
+      if (dt.files && dt.files.length) return true;
+      const types = Array.from(dt.types || []);
+      if (types.includes('Files')) return true;
+      if (types.includes('application/x-moz-file')) return true;
+      if (dt.items && dt.items.length) {
+        return Array.from(dt.items).some((item) => item.kind === 'file');
+      }
+      return false;
     }
 
     function clearDropActiveState() {
-      fileDragDepth = 0;
-      importDropzoneEl.classList.remove('import-dropzone--active');
-      if (mainImportEl) mainImportEl.classList.remove('main-import--active');
-      if (mainContentEl) mainContentEl.classList.remove('main--drop-active');
+      document.body.classList.remove('body--file-drag');
+      if (importDropzoneEl) importDropzoneEl.classList.remove('import-dropzone--active');
+      const boardFileGroupEl = toolbarEl && toolbarEl.querySelector('.toolbar__group--board-file');
+      if (boardFileGroupEl) boardFileGroupEl.classList.remove('toolbar__group--drop-active');
     }
 
     function setDropActiveState() {
-      importDropzoneEl.classList.add('import-dropzone--active');
-      if (mainImportEl) mainImportEl.classList.add('main-import--active');
-      if (mainContentEl) mainContentEl.classList.add('main--drop-active');
+      document.body.classList.add('body--file-drag');
+      if (importDropzoneEl) importDropzoneEl.classList.add('import-dropzone--active');
+      const boardFileGroupEl = toolbarEl && toolbarEl.querySelector('.toolbar__group--board-file');
+      if (boardFileGroupEl) boardFileGroupEl.classList.add('toolbar__group--drop-active');
     }
 
     function processDroppedFiles(e) {
@@ -3913,79 +4388,62 @@
       if (!files.length) return;
       const file = files.find((f) => /\.(json|zip)$/i.test(f.name || '')) || files[0];
       if (!file || !/\.(json|zip)$/i.test(file.name || '')) {
-        setAppStatus(t('status.invalidImportFile'), { autoClearMs: 2200 });
+        if (downloadStatus) {
+          downloadStatus.textContent = t('status.invalidImportFile');
+          setTimeout(function () {
+            if (downloadStatus) downloadStatus.textContent = '';
+          }, 2200);
+        }
         return;
       }
-      setAppStatus(file.name.endsWith('.zip') ? 'Importing ZIP…' : 'Importing board…');
       importBoard(file);
     }
 
-    importDropzoneEl.addEventListener('click', function () {
-      importInput.click();
-    });
-    importDropzoneEl.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
+    if (importDropzoneEl) {
+      importDropzoneEl.addEventListener('click', function () {
         importInput.click();
-      }
-    });
+      });
+      importDropzoneEl.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          importInput.click();
+        }
+      });
+    }
 
-    importInput.addEventListener('change', function (e) {
-      if (e.target.files && e.target.files[0]) {
-        setAppStatus('Importing…');
-        importBoard(e.target.files[0]);
-      }
-      e.target.value = '';
+    document.addEventListener('dragenter', function (e) {
+      if (!hasFileDrag(e)) return;
+      e.preventDefault();
+      setDropActiveState();
     });
-
-    dropTargets.forEach((target) => {
-      target.addEventListener('dragenter', function (e) {
-        if (!hasFileDrag(e)) return;
-        e.preventDefault();
-        e.stopPropagation();
-        fileDragDepth++;
-        if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
-        setDropActiveState();
-      });
-      target.addEventListener('dragover', function (e) {
-        if (!hasFileDrag(e)) return;
-        e.preventDefault();
-        e.stopPropagation();
-        if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
-      });
-      target.addEventListener('dragleave', function (e) {
-        if (!hasFileDrag(e)) return;
-        e.preventDefault();
-        e.stopPropagation();
-        fileDragDepth = Math.max(0, fileDragDepth - 1);
-        if (fileDragDepth === 0) clearDropActiveState();
-      });
-      target.addEventListener('dragend', function (e) {
-        if (!hasFileDrag(e)) return;
-        clearDropActiveState();
-      });
-      target.addEventListener('drop', function (e) {
-        if (!hasFileDrag(e)) return;
-        e.preventDefault();
-        e.stopPropagation();
-        clearDropActiveState();
-        processDroppedFiles(e);
-      });
-    });
-
     document.addEventListener('dragover', function (e) {
       if (!hasFileDrag(e)) return;
       e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+      setDropActiveState();
+    });
+    document.addEventListener('dragleave', function (e) {
+      if (!hasFileDrag(e)) return;
+      if (e.relatedTarget && document.documentElement.contains(e.relatedTarget)) return;
+      clearDropActiveState();
+    });
+    document.addEventListener('drop', function (e) {
+      if (!hasFileDrag(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      clearDropActiveState();
+      processDroppedFiles(e);
     });
   }
 
   function initToolbar() {
     if (!toolbarEl) return;
     const addBtn = toolbarEl.querySelector('[data-action="add"]');
-    const importFileBtn = toolbarEl.querySelector('[data-action="import-file"]');
+    const importBtn = toolbarEl.querySelector('[data-action="import"]');
     const exportBtn = toolbarEl.querySelector('[data-action="export"]');
     const exportPortableBtn = toolbarEl.querySelector('[data-action="export-portable"]');
     const portableCheckBtn = toolbarEl.querySelector('[data-action="portable-check"]');
+    const reinitializeBtn = toolbarEl.querySelector('[data-action="reinitialize"]');
     const clearDataBtn = toolbarEl.querySelector('[data-action="clear-data"]');
     const downloadBtn = toolbarEl.querySelector('[data-action="download-sounds"]');
     const webAddBtn = toolbarEl.querySelector('[data-action="web-add"]');
@@ -3996,9 +4454,8 @@
     const helpBtn = toolbarEl.querySelector('[data-action="help-open"]');
     const themeBtn = toolbarEl.querySelector('[data-action="theme-toggle"]');
     if (addBtn) addBtn.addEventListener('click', addSound);
-    if (importFileBtn && importInput) {
-      importFileBtn.addEventListener('click', function () { importInput.click(); });
-    }
+    if (importBtn && importInput) importBtn.addEventListener('click', () => importInput.click());
+    if (importInput) importInput.addEventListener('change', (e) => { if (e.target.files[0]) importBoard(e.target.files[0]); e.target.value = ''; });
     if (exportBtn) exportBtn.addEventListener('click', exportBoard);
     if (exportPortableBtn) exportPortableBtn.addEventListener('click', function () {
       exportPortableZip().catch(function (e) {
@@ -4012,6 +4469,22 @@
         console.warn('portable check failed', e);
       });
     });
+    if (reinitializeBtn) reinitializeBtn.addEventListener('click', function () {
+      reinitializeApp({ manual: true, reloadBoard: true }).catch(function (e) {
+        console.warn('reinitialize failed', e);
+      });
+    });
+    if (importModeMergeEl) {
+      importModeMergeEl.addEventListener('change', function () {
+        if (importModeMergeEl.checked) saveImportModePreference('merge');
+      });
+    }
+    if (importModeReplaceEl) {
+      importModeReplaceEl.addEventListener('change', function () {
+        if (importModeReplaceEl.checked) saveImportModePreference('replace');
+      });
+    }
+    loadImportModePreference();
     if (clearDataBtn) clearDataBtn.addEventListener('click', clearAllDataAndReset);
     if (downloadBtn) downloadBtn.addEventListener('click', downloadAllMedia);
     if (fileModeAttachBtn) fileModeAttachBtn.addEventListener('click', function () {
@@ -4055,28 +4528,39 @@
       });
     }
     if (globalVolumeEl && Audio) {
+      loadMasterVolumePreference();
       globalVolumeEl.addEventListener('input', function () {
         const pct = parseInt(globalVolumeEl.value, 10);
-        if (Audio.setMasterVolume) Audio.setMasterVolume(pct / 100);
-        if (globalVolumeLabel) globalVolumeLabel.textContent = t('label.volume', { pct: isNaN(pct) ? 100 : pct });
-      });
-      if (globalVolumeLabel) globalVolumeLabel.textContent = t('label.volume', {
-        pct: Audio.getMasterVolume ? Math.round(Audio.getMasterVolume() * 100) : 100
+        const safePct = isNaN(pct) ? 100 : pct;
+        if (Audio.setMasterVolumeFromPercent) {
+          Audio.setMasterVolumeFromPercent(safePct);
+        } else if (Audio.setMasterVolume) {
+          Audio.setMasterVolume(safePct / 100);
+        }
+        updateGlobalVolumeLabel(safePct);
+        try { localStorage.setItem(MASTER_VOLUME_KEY, String(safePct)); } catch (_) {}
       });
     }
 
     if (searchInputEl) {
       searchInputEl.addEventListener('input', function () {
         searchQuery = searchInputEl.value || '';
-        render();
+        scheduleSearchRender();
+      });
+      searchInputEl.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+          searchQuery = '';
+          searchInputEl.value = '';
+          renderSearchResults();
+        }
       });
     }
     if (searchClearEl) {
       searchClearEl.addEventListener('click', function () {
         searchQuery = '';
         if (searchInputEl) searchInputEl.value = '';
-        render();
-        if (searchInputEl) searchInputEl.focus();
+        renderSearchResults();
+        if (searchInputEl) focusWithoutScroll(searchInputEl);
       });
     }
 
@@ -4097,21 +4581,6 @@
       });
     }
 
-    if (compressorToggleEl) {
-      let compOn = true;
-      try {
-        const raw = localStorage.getItem(COMPRESSOR_KEY);
-        if (raw != null) compOn = raw === 'true';
-      } catch (_) {}
-      compressorToggleEl.checked = compOn;
-      if (Audio && Audio.setCompressorEnabled) Audio.setCompressorEnabled(compOn);
-      compressorToggleEl.addEventListener('change', function () {
-        const enabled = !!compressorToggleEl.checked;
-        try { localStorage.setItem(COMPRESSOR_KEY, String(enabled)); } catch (_) {}
-        if (Audio && Audio.setCompressorEnabled) Audio.setCompressorEnabled(enabled);
-      });
-    }
-
     if (quickBarEl) {
       const quickAdd = quickBarEl.querySelector('[data-action="quick-add"]');
       const quickWeb = quickBarEl.querySelector('[data-action="quick-web"]');
@@ -4128,7 +4597,7 @@
       if (quickSearch) {
         quickSearch.addEventListener('click', function () {
           if (searchInputEl) {
-            searchInputEl.focus();
+            focusWithoutScroll(searchInputEl);
             searchInputEl.select();
           }
         });
@@ -4249,12 +4718,11 @@
       if (!s || !s.fileUrl) return setTimeout(step, 0);
       if (!s.extra || typeof s.extra !== 'object') s.extra = {};
 
-      Audio.analyzeFileUrl(s.fileUrl, s).then(function (res) {
+      Audio.analyzeFileUrl(s.fileUrl).then(function (res) {
         if (res && typeof res.gain === 'number' && isFinite(res.gain)) {
           s.extra.normGain = res.gain;
           s.extra.normAnalyzedAt = new Date().toISOString();
-          s.extra.normAlgoVersion = res.algoVersion || (Audio.NORM_ALGO_VERSION || 2);
-          if (typeof res.lufs === 'number' && isFinite(res.lufs)) s.extra.normLufs = res.lufs;
+          s.extra.normAlgoVersion = res.algoVersion || 1;
           updated++;
         }
       }).catch(function () {}).finally(function () {
@@ -4267,12 +4735,12 @@
 
   function initModal() {
     if (!modalEl || !modalForm) return;
-    const saveBtn = modalEl.querySelector('[data-action="save"]');
-    const cancelBtn = modalEl.querySelector('[data-action="cancel"]');
-    const deleteBtn = modalEl.querySelector('[data-action="delete"]');
-    const previewBtn = modalEl.querySelector('[data-action="preview"]');
-    const moveUpBtn = modalEl.querySelector('[data-action="move-up"]');
-    const moveDownBtn = modalEl.querySelector('[data-action="move-down"]');
+    const saveBtn = modalForm.querySelector('[data-action="save"]');
+    const cancelBtn = modalForm.querySelector('[data-action="cancel"]');
+    const deleteBtn = modalForm.querySelector('[data-action="delete"]');
+    const previewBtn = modalForm.querySelector('[data-action="preview"]');
+    const moveUpBtn = modalForm.querySelector('[data-action="move-up"]');
+    const moveDownBtn = modalForm.querySelector('[data-action="move-down"]');
     const volumeRange = modalForm.querySelector('[name="volume"]');
     const fileUrlInput = modalForm.querySelector('[name="fileUrl"]');
     const hotkeyInput = modalForm.querySelector('[name="hotkey"]');
@@ -4291,12 +4759,43 @@
       if (s) deleteSound(s);
     });
     if (previewBtn) previewBtn.addEventListener('click', previewFromModal);
+    const detectTempoBtn = modalForm.querySelector('[data-action="detect-tempo"]');
+    if (detectTempoBtn) detectTempoBtn.addEventListener('click', function () { runDetectTempoForModal(); });
+    const pitchRange = modalForm.querySelector('[name="pitchSemitones"]');
+    if (pitchRange) {
+      pitchRange.addEventListener('input', function () {
+        updatePitchSemitoneLabel(parseInt(pitchRange.value, 10));
+      });
+    }
+    const projectBpmEl = modalForm.querySelector('[name="projectBpm"]');
+    if (projectBpmEl) {
+      projectBpmEl.addEventListener('change', function () {
+        setTapTrimStatus('Project BPM updated — playback pitch/tempo will follow on save.');
+      });
+    }
+    document.addEventListener('keydown', function (e) {
+      if (!modalEl || modalEl.hidden) return;
+      if (e.target && (e.target.closest('input') || e.target.closest('textarea'))) return;
+      if (/^[0-9]$/.test(e.key || '')) {
+        if (handlePreviewTapTrim()) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }
+    });
     if (moveUpBtn) moveUpBtn.addEventListener('click', () => moveSoundInModal('up'));
     if (moveDownBtn) moveDownBtn.addEventListener('click', () => moveSoundInModal('down'));
     if (volumeRange) volumeRange.addEventListener('input', function () { updateVolumePercent(parseFloat(volumeRange.value)); });
     const speedRange = modalForm.querySelector('[name="playbackRate"]');
     if (speedRange) speedRange.addEventListener('input', function () { updateSpeedValue(parseFloat(speedRange.value)); });
-    if (fileUrlInput && Audio) fileUrlInput.addEventListener('blur', soundFromFormForDuration);
+    if (fileUrlInput && Audio) {
+      fileUrlInput.addEventListener('blur', function () {
+        soundFromFormForDuration();
+        if (getModalAudioFileUrl() && !getModalDetectedBpm()) {
+          runDetectTempoForModal().catch(function () {});
+        }
+      });
+    }
     if (hotkeyInput) {
       hotkeyInput.addEventListener('keydown', function (e) {
         captureHotkeyFromInputKeydown(e, saveSoundFromModal);
@@ -4376,14 +4875,14 @@
 
   function init() {
     initI18n();
+    loadLastSaveErrorFlag();
     initHeaderMenu();
     applyThemePreference(loadThemePreference());
     favouriteStripRows = loadFavouriteRows();
     recentStripRows = loadRecentRows();
-    initImportDropzone();
     initToolbar();
+    initImportFileDrop();
     initModal();
-    initVisualViewport();
     initKeyboard();
     if (portableReportCloseBtn) portableReportCloseBtn.addEventListener('click', closePortableReport);
     if (portableReportCopyBtn) portableReportCopyBtn.addEventListener('click', function () { copyPortableReportToClipboard(); });

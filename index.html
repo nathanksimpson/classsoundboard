@@ -4,10 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Soundboard</title>
-  <link rel="stylesheet" href="styles.css?v=20260524-1">
+  <link rel="stylesheet" href="styles.css?v=20260506-8">
 </head>
 <body>
-  <input type="file" id="import-input" accept=".json,.zip,application/zip" hidden>
   <header class="header">
     <div class="header__toprow">
       <h1 id="board-name" class="header__title" title="Click to change board name">Soundboard</h1>
@@ -21,11 +20,11 @@
       <div class="search" role="search" aria-label="Search sounds">
         <input type="search" id="search-input" class="search__input" placeholder="Search (title or category)…" aria-label="Search sounds by title or category" data-i18n-placeholder="search.placeholder">
         <button type="button" id="search-clear" class="search__clear" aria-label="Clear search" title="Clear search" data-i18n="search.clear">Clear</button>
-        <span class="search__count" id="search-count" aria-live="polite"></span>
+        <span class="search__count" id="search-count" aria-live="off"></span>
       </div>
       <div class="header__global-volume" id="global-volume-wrap" title="Master volume">
         <label class="global-volume__label"><span id="global-volume-label">Volume 100%</span></label>
-        <input type="range" id="global-volume" class="global-volume__slider" min="0" max="100" value="100">
+        <input type="range" id="global-volume" class="global-volume__slider" min="0" max="200" step="5" value="100">
       </div>
     </div>
     <div id="header-popout" class="header__popout" hidden>
@@ -48,12 +47,19 @@
 
       <div class="toolbar__group toolbar__group--board-file" aria-label="Board file tools">
         <span class="toolbar__group-label" data-i18n="toolbar.group.board">Board File</span>
-        <button type="button" class="btn btn--secondary" data-action="import-file" data-i18n="toolbar.importFile">Import board file…</button>
+        <input type="file" id="import-input" accept=".json,.zip,application/zip" hidden>
         <button type="button" class="btn btn--secondary" data-action="export" data-i18n="toolbar.export">Export Board</button>
         <button type="button" class="btn btn--secondary" data-action="export-portable" data-i18n="toolbar.exportPortable" data-i18n-title="toolbar.exportPortableTitle" title="Export a .zip with board + audio + images (offline portable)">Export Portable ZIP</button>
         <button type="button" class="btn btn--secondary" data-action="portable-check" data-i18n="toolbar.portableCheck" data-i18n-title="toolbar.portableCheckTitle" title="Check if your board is ready for portable ZIP (offline) export">Portable readiness check</button>
+        <button type="button" class="btn btn--secondary" data-action="reinitialize" data-i18n="toolbar.reinitialize" data-i18n-title="toolbar.reinitializeTitle" title="Reload saved board and re-preload all audio (use if sounds stop working after switching apps)">Reinitialize sounds</button>
         <button type="button" class="btn btn--danger" data-action="clear-data" data-i18n="toolbar.clearData" data-i18n-title="toolbar.clearDataTitle" title="Clear all saved board/app data and reset to defaults">
           Clear All Data
+        </button>
+        <div class="import-mode" role="group" aria-label="Import mode">
+          <label class="import-mode__option"><input type="radio" name="import-mode" id="import-mode-merge" value="merge" checked> <span data-i18n="toolbar.importMerge">Merge into board</span></label>
+          <label class="import-mode__option"><input type="radio" name="import-mode" id="import-mode-replace" value="replace"> <span data-i18n="toolbar.importReplace">Replace entire board</span></label>
+        </div>
+        <button type="button" id="import-dropzone" class="import-dropzone" data-i18n="toolbar.importDropzone" data-i18n-title="toolbar.importDropzoneTitle" title="Drop a .json or .zip board file here, or click to choose one">
         </button>
         <div id="file-mode-controls" class="file-mode-controls" hidden>
           <button type="button" id="file-mode-attach" class="btn btn--secondary" title="Pick or save a portable ZIP and keep it in sync. Chrome/Edge desktop only.">Sync to file…</button>
@@ -66,13 +72,9 @@
       <div class="toolbar__group toolbar__group--audio-tools" aria-label="Audio tools">
         <span class="toolbar__group-label" data-i18n="toolbar.group.audio">Audio Tools</span>
         <button type="button" class="btn btn--secondary" data-action="download-sounds" title="Download audio + images, save into the app, and update the board to use local copies" data-i18n="toolbar.downloadMedia" data-i18n-title="toolbar.downloadMediaTitle">Download media</button>
-        <label class="btn btn--secondary auto-level" title="Apply per-sound LUFS normalization gain when playing">
+        <label class="btn btn--secondary auto-level" title="Automatically level sound volumes">
           <input type="checkbox" id="auto-level-toggle" class="auto-level__check" checked>
           <span class="auto-level__label" data-i18n="toolbar.autoLevel">Auto level</span>
-        </label>
-        <label class="btn btn--secondary auto-level" title="Gentle master bus compression to tame peaks">
-          <input type="checkbox" id="compressor-toggle" class="auto-level__check" checked>
-          <span class="auto-level__label">Peak safety</span>
         </label>
         <button type="button" class="btn btn--secondary" data-action="analyze-all" title="Analyze all sounds for consistent volume (recommended once per board)" data-i18n="toolbar.analyzeAll" data-i18n-title="toolbar.analyzeAllTitle">Analyze all</button>
       </div>
@@ -102,15 +104,7 @@
     </div>
   </header>
 
-  <main class="main" id="main-content">
-    <section class="main-import" id="main-import" aria-label="Import board">
-      <button type="button" id="import-dropzone" class="import-dropzone" tabindex="0"
-        data-i18n="toolbar.importDropzone" data-i18n-title="toolbar.importDropzoneTitle"
-        title="Drop a .json or portable .zip board here, or click to choose a file">
-        Drop board JSON or portable ZIP here — or click to browse
-      </button>
-      <p id="import-bar-status" class="main-import__status" aria-live="polite"></p>
-    </section>
+  <main class="main">
     <section id="quick-access" class="quick-access" aria-label="Quick access sounds">
       <div id="recents-section" class="quick-access__section" hidden>
         <div class="quick-access__header">
@@ -186,7 +180,7 @@
         <h3 data-i18n="help.enHeader">English Guide</h3>
         <p data-i18n="help.enIntro">Use this soundboard to quickly play, organize, and manage sounds.</p>
         <ul>
-          <li data-i18n="help.en1">Add sounds with Add Sound or Add Web Sound, or drop a board JSON / portable ZIP on the main screen.</li>
+          <li data-i18n="help.en1">Add sounds with Add Sound or Add Web Sound.</li>
           <li data-i18n="help.en2">Edit a tile with the pencil icon (or right-click on desktop).</li>
           <li data-i18n="help.en3">Assign hotkeys like Q, Shift+A, or Shift+.</li>
           <li data-i18n="help.en4">Use Hotkeys only to show only sounds with hotkeys.</li>
@@ -195,15 +189,15 @@
         </ul>
         <h4 data-i18n="help.hotkeysHeader">Useful Hotkeys for default sounds</h4>
         <ul>
-          <li data-i18n="help.hk1">3 - Mario Kart 3-2-1 Go</li>
-          <li data-i18n="help.hk2">X - Wrong answer buzzer</li>
-          <li data-i18n="help.hk3">R - Great!</li>
-          <li data-i18n="help.hk4">A - Anime Wow</li>
-          <li data-i18n="help.hk5">9 - Sad music</li>
-          <li data-i18n="help.hk6">P - Perfect</li>
-          <li data-i18n="help.hk7">M - Stop, wait a minute</li>
-          <li data-i18n="help.hk8">V - Victory sound</li>
-          <li data-i18n="help.hk9">1 - One more Time</li>
+          <li data-i18n="help.hk1">3 - Mario Kart start race</li>
+          <li data-i18n="help.hk2">X - Wrong Answer GameShow</li>
+          <li data-i18n="help.hk3">G - Great</li>
+          <li data-i18n="help.hk4">A - Anime wow</li>
+          <li data-i18n="help.hk5">P - No no no no…</li>
+          <li data-i18n="help.hk6">M - Stop! Wait-A-Minute-</li>
+          <li data-i18n="help.hk7">Shift+W - You Win - Perfect</li>
+          <li data-i18n="help.hk8">H - Heavens Choir</li>
+          <li data-i18n="help.hk9">L - Hey Listen</li>
         </ul>
         <h3 data-i18n="help.koHeader">한국어 안내</h3>
         <p data-i18n="help.koIntro">이 사운드보드는 사운드를 빠르게 재생하고 정리/관리할 수 있도록 만들어졌습니다.</p>
@@ -264,7 +258,6 @@
     <div class="modal__panel">
       <h2 id="modal-title" class="modal__title">Edit Sound</h2>
       <p id="modal-error" class="modal__error" aria-live="polite"></p>
-      <div class="modal__scroll">
       <form id="modal-form" class="modal__form">
         <label class="field">
           <span class="field__label">Title</span>
@@ -296,9 +289,29 @@
           <input type="range" name="volume" class="field__input field__range" min="0" max="100" value="100" data-volume-percent="volume-percent">
         </label>
         <label class="field">
-          <span class="field__label">Playback speed <span id="speed-value">1.0</span>×</span>
+          <span class="field__label">Playback speed <span id="speed-value">1.0</span>× <span class="field__hint-inline">(fine tune)</span></span>
           <input type="range" name="playbackRate" class="field__input field__range" min="0.5" max="2" step="0.1" value="1">
         </label>
+        <div class="field tempo-field">
+          <span class="field__label">Tempo &amp; pitch</span>
+          <p class="field__hint" id="tempo-hint">Press Preview, then tap a number key twice: first tap = in, second tap = out (snaps to beat when BPM is set).</p>
+          <div class="tempo-field__row">
+            <label class="tempo-field__item">
+              <span class="tempo-field__label">Detected BPM</span>
+              <input type="number" name="detectedBpm" class="field__input tempo-field__bpm" min="60" max="200" step="0.1" placeholder="Auto">
+            </label>
+            <label class="tempo-field__item">
+              <span class="tempo-field__label">Project BPM</span>
+              <input type="number" name="projectBpm" class="field__input tempo-field__bpm" min="60" max="200" step="0.1" placeholder="Match detected">
+            </label>
+            <button type="button" class="btn btn--secondary btn--tiny" data-action="detect-tempo">Detect tempo</button>
+          </div>
+          <label class="field tempo-field__pitch">
+            <span class="field__label">Pitch shift <span id="pitch-semitone-label">0</span> semitones</span>
+            <input type="range" name="pitchSemitones" class="field__input field__range" min="-12" max="12" step="1" value="0">
+          </label>
+          <p class="field__hint" id="tap-trim-status" aria-live="polite"></p>
+        </div>
         <label class="field field--checkbox">
           <input type="checkbox" name="loop" value="1">
           <span class="field__label">Loop (repeat until stopped)</span>
@@ -325,29 +338,28 @@
           <input type="hidden" name="startSec" id="startSec-input">
           <input type="hidden" name="endSec" id="endSec-input">
         </div>
+        <div class="modal__actions modal__actions--wrap">
+          <button type="button" class="btn btn--secondary" data-action="preview">Preview</button>
+          <button type="button" class="btn btn--secondary" data-action="move-up" title="Move sound up">Move up</button>
+          <button type="button" class="btn btn--secondary" data-action="move-down" title="Move sound down">Move down</button>
+          <button type="submit" class="btn btn--primary" data-action="save">Save</button>
+          <button type="button" class="btn btn--secondary" data-action="cancel">Cancel</button>
+          <button type="button" class="btn btn--danger" data-action="delete">Delete</button>
+        </div>
       </form>
-      </div>
-      <div class="modal__actions modal__actions--wrap">
-        <button type="button" class="btn btn--secondary" data-action="preview">Preview</button>
-        <button type="button" class="btn btn--secondary" data-action="move-up" title="Move sound up">Move up</button>
-        <button type="button" class="btn btn--secondary" data-action="move-down" title="Move sound down">Move down</button>
-        <button type="submit" class="btn btn--primary" data-action="save" form="modal-form">Save</button>
-        <button type="button" class="btn btn--secondary" data-action="cancel">Cancel</button>
-        <button type="button" class="btn btn--danger" data-action="delete">Delete</button>
-      </div>
     </div>
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" crossorigin="anonymous"></script>
   <datalist id="category-options"></datalist>
-  <script src="storage.js?v=20260524-1"></script>
-  <script src="local-audio.js?v=20260524-1"></script>
-  <script src="local-images.js?v=20260524-1"></script>
-  <script src="file-mode.js?v=20260524-1"></script>
-  <script src="loudness.js?v=20260524-1"></script>
-  <script src="audio-engine.js?v=20260524-1"></script>
-  <script src="board-manager.js?v=20260524-1"></script>
-  <script src="ui-renderer.js?v=20260524-1"></script>
-  <script src="soundboard.js?v=20260524-1"></script>
+  <script src="storage.js?v=20260513-8"></script>
+  <script src="local-audio.js?v=20260513-8"></script>
+  <script src="local-images.js?v=20260513-8"></script>
+  <script src="file-mode.js?v=20260513-8"></script>
+  <script src="tempo-analysis.js?v=20260513-8"></script>
+  <script src="audio-engine.js?v=20260513-8"></script>
+  <script src="board-manager.js?v=20260513-8"></script>
+  <script src="ui-renderer.js?v=20260513-8"></script>
+  <script src="soundboard.js?v=20260513-8"></script>
 </body>
 </html>

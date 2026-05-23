@@ -138,6 +138,28 @@ function putDataUrl(dataUrl) {
   }
 }
 
+function clearAll() {
+  objectUrlCache.forEach((url) => {
+    try { URL.revokeObjectURL(url); } catch (e) { console.warn('local-images: revokeObjectURL failed', e); }
+  });
+  objectUrlCache.clear();
+  dbPromise = null;
+  return new Promise((resolve) => {
+    if (!window || !window.indexedDB || typeof window.indexedDB.deleteDatabase !== 'function') {
+      resolve();
+      return;
+    }
+    try {
+      const req = window.indexedDB.deleteDatabase(IMAGES_DB_NAME);
+      req.onsuccess = function () { resolve(); };
+      req.onerror = function () { resolve(); };
+      req.onblocked = function () { resolve(); };
+    } catch (_) {
+      resolve();
+    }
+  });
+}
+
 window.SoundboardLocalImages = {
   putBlob,
   getBlob,
@@ -145,5 +167,6 @@ window.SoundboardLocalImages = {
   getObjectUrl,
   putDataUrl,
   listKeys,
-  generateId
+  generateId,
+  clearAll
 };

@@ -13,6 +13,10 @@ const STORAGE_KEY = 'soundboard-board';
 const STORAGE_LOCATION_KEY = 'soundboard-board-location'; // 'local' | 'idb'
 const STORAGE_SCHEMA_VERSION_KEY = 'soundboard-schema-version';
 const STORAGE_SCHEMA_VERSION = 2;
+/** Skip localStorage when serialized board exceeds this (bytes). ~4 MB avoids quota thrashing. */
+const LOCAL_STORAGE_SIZE_THRESHOLD = 4_000_000;
+/** Warn in UI when localStorage save succeeds but payload is this large (bytes). */
+const LOCAL_STORAGE_NEAR_QUOTA_HINT = 2_500_000;
 
 const BOARD_DB_NAME = 'soundboard-storage';
 const STORE_NAME = 'kv';
@@ -92,13 +96,27 @@ function saveBoard(board) {
     return Promise.reject(e);
   }
 
+  // Large boards go straight to IndexedDB to avoid repeated QuotaExceededError.
+  if (serialized.length > LOCAL_STORAGE_SIZE_THRESHOLD) {
+    console.info('storage: board size', serialized.length, 'exceeds threshold; saving to IndexedDB');
+    try { localStorage.removeItem(STORAGE_KEY); } catch (err) { console.warn('storage: stale clear failed', err); }
+    try { localStorage.setItem(STORAGE_LOCATION_KEY, 'idb'); } catch (err) { console.warn('storage: location flag write failed', err); }
+    return saveBoardToIdb(board)
+      .then(() => ({ location: 'idb', nearQuota: false }))
+      .catch((err) => {
+        console.warn('storage: idb save failed', err);
+        throw err;
+      });
+  }
+
   try {
     localStorage.setItem(STORAGE_KEY, serialized);
     try { localStorage.setItem(STORAGE_LOCATION_KEY, 'local'); } catch (e) { console.warn('storage: location flag write failed', e); }
     // Best-effort: keep IDB in sync so cross-source loads pick the fresher copy.
     // We do not block on this; the localStorage copy is the source of truth here.
     saveBoardToIdb(board).catch((e) => { console.warn('storage: idb mirror failed', e); });
-    return Promise.resolve('local');
+    const nearQuota = serialized.length >= LOCAL_STORAGE_NEAR_QUOTA_HINT;
+    return Promise.resolve({ location: 'local', nearQuota });
   } catch (e) {
     console.warn('storage: local save failed; falling back to IndexedDB', e);
     // Synchronously drop the stale localStorage copy so a refresh BEFORE the
@@ -106,7 +124,7 @@ function saveBoard(board) {
     try { localStorage.removeItem(STORAGE_KEY); } catch (err) { console.warn('storage: stale clear failed', err); }
     try { localStorage.setItem(STORAGE_LOCATION_KEY, 'idb'); } catch (err) { console.warn('storage: location flag write failed', err); }
     return saveBoardToIdb(board)
-      .then(() => 'idb')
+      .then(() => ({ location: 'idb', nearQuota: false }))
       .catch((err) => {
         console.warn('storage: idb save failed', err);
         throw err;
@@ -192,5 +210,7 @@ window.SoundboardStorage = {
   getSchemaVersion,
   setSchemaVersion,
   clearBoard,
-  SCHEMA_VERSION: STORAGE_SCHEMA_VERSION
+  SCHEMA_VERSION: STORAGE_SCHEMA_VERSION,
+  LOCAL_STORAGE_SIZE_THRESHOLD,
+  LOCAL_STORAGE_NEAR_QUOTA_HINT
 };

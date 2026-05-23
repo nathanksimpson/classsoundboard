@@ -13,14 +13,6 @@ function validateSound(s) {
   if (s.startMs != null && typeof s.startMs !== 'number') return false;
   if (s.endMs != null && typeof s.endMs !== 'number') return false;
   if (s.startMs != null && s.endMs != null && s.startMs >= s.endMs) return false;
-  if (s.extra && typeof s.extra === 'object') {
-    if (s.extra.normGain != null && (typeof s.extra.normGain !== 'number' || !isFinite(s.extra.normGain) || s.extra.normGain < 0 || s.extra.normGain > 8)) {
-      return false;
-    }
-    if (s.extra.normAlgoVersion != null && (typeof s.extra.normAlgoVersion !== 'number' || s.extra.normAlgoVersion < 1)) {
-      return false;
-    }
-  }
   return true;
 }
 
@@ -52,24 +44,8 @@ function normalizeSound(s) {
     endMs: s.endMs != null ? Number(s.endMs) : null,
     hotkey: s.hotkey != null ? String(s.hotkey).trim() : '',
     color: s.color != null ? String(s.color).trim() : '',
-    extra: normalizeSoundExtra(s.extra)
+    extra: s.extra && typeof s.extra === 'object' ? s.extra : {}
   };
-}
-
-function normalizeSoundExtra(extra) {
-  if (!extra || typeof extra !== 'object') return {};
-  const out = { ...extra };
-  if (out.normGain != null) {
-    const g = Number(out.normGain);
-    out.normGain = isFinite(g) ? Math.max(0, Math.min(8, g)) : undefined;
-    if (out.normGain === undefined) delete out.normGain;
-  }
-  if (out.normAlgoVersion != null) {
-    const v = Number(out.normAlgoVersion);
-    out.normAlgoVersion = isFinite(v) && v >= 1 ? Math.floor(v) : undefined;
-    if (out.normAlgoVersion === undefined) delete out.normAlgoVersion;
-  }
-  return out;
 }
 
 // Reserved top-level fields that have explicit normalization rules below.
@@ -134,11 +110,114 @@ function createDefaultSound(overrides = {}) {
   });
 }
 
+function ensureUniqueSoundId(existingIds, sound) {
+  const base = normalizeSound(sound);
+  if (!existingIds.has(base.id)) return base;
+  let n = 2;
+  let candidate = base.id + '-copy';
+  while (existingIds.has(candidate)) {
+    candidate = base.id + '-copy-' + n;
+    n++;
+  }
+  return { ...base, id: candidate };
+}
+
+const RECENTS_MAX_DEFAULT = 20;
+
+/**
+ * Merge incoming board sounds into existing board.
+ * options.duplicateStrategy: 'skip' | 'replace' | 'rename' (default 'skip')
+ */
+function mergeBoards(existing, incoming, options) {
+  const opts = options && typeof options === 'object' ? options : {};
+  const duplicateStrategy = opts.duplicateStrategy === 'replace' || opts.duplicateStrategy === 'rename'
+    ? opts.duplicateStrategy
+    : 'skip';
+
+  const base = normalizeBoard(existing && typeof existing === 'object' ? existing : { sounds: [] });
+  const inc = normalizeBoard(incoming && typeof incoming === 'object' ? incoming : { sounds: [] });
+  const merged = JSON.parse(JSON.stringify(base));
+  const existingIds = new Set((merged.sounds || []).map((s) => String(s.id)));
+  const existingHotkeys = new Map();
+  (merged.sounds || []).forEach((s) => {
+    const hk = String(s.hotkey || '').trim();
+    if (hk) existingHotkeys.set(hk, s.id);
+  });
+
+  let added = 0;
+  let skipped = 0;
+  let hotkeyConflicts = 0;
+
+  (inc.sounds || []).forEach((rawSound) => {
+    const sound = normalizeSound(rawSound);
+    const id = String(sound.id);
+
+    if (existingIds.has(id)) {
+      if (duplicateStrategy === 'replace') {
+        const idx = merged.sounds.findIndex((s) => String(s.id) === id);
+        if (idx >= 0) merged.sounds[idx] = sound;
+        added++;
+      } else if (duplicateStrategy === 'rename') {
+        const unique = ensureUniqueSoundId(existingIds, sound);
+        merged.sounds.push(unique);
+        existingIds.add(unique.id);
+        added++;
+      } else {
+        skipped++;
+      }
+      return;
+    }
+
+    const hk = String(sound.hotkey || '').trim();
+    if (hk && existingHotkeys.has(hk)) {
+      sound.hotkey = '';
+      hotkeyConflicts++;
+    } else if (hk) {
+      existingHotkeys.set(hk, sound.id);
+    }
+
+    merged.sounds.push(sound);
+    existingIds.add(sound.id);
+    added++;
+  });
+
+  // Merge quickAccess favourites/recents if present on incoming board.
+  const incQa = inc.quickAccess && typeof inc.quickAccess === 'object' ? inc.quickAccess : null;
+  if (incQa) {
+    if (!merged.quickAccess || typeof merged.quickAccess !== 'object') {
+      merged.quickAccess = {};
+    }
+    const favSet = new Set(Array.isArray(merged.quickAccess.favourites) ? merged.quickAccess.favourites.map(String) : []);
+    (Array.isArray(incQa.favourites) ? incQa.favourites : []).forEach((id) => {
+      if (existingIds.has(String(id))) favSet.add(String(id));
+    });
+    merged.quickAccess.favourites = Array.from(favSet);
+
+    const recentList = Array.isArray(merged.quickAccess.recents) ? merged.quickAccess.recents.map(String) : [];
+    const recentSet = new Set(recentList);
+    (Array.isArray(incQa.recents) ? incQa.recents : []).forEach((id) => {
+      const sid = String(id);
+      if (existingIds.has(sid) && !recentSet.has(sid)) {
+        recentList.push(sid);
+        recentSet.add(sid);
+      }
+    });
+    merged.quickAccess.recents = recentList.slice(-RECENTS_MAX_DEFAULT);
+  }
+
+  return {
+    board: merged,
+    stats: { added, skipped, hotkeyConflicts }
+  };
+}
+
 window.SoundboardBoardManager = {
   validateSound,
   validateBoard,
   normalizeSound,
   normalizeBoard,
   generateId,
-  createDefaultSound
+  createDefaultSound,
+  ensureUniqueSoundId,
+  mergeBoards
 };

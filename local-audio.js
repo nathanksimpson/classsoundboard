@@ -10,6 +10,7 @@ let dbPromise = null;
 function openDb() {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
+    if (!window || !window.indexedDB) return reject(new Error('IndexedDB not available'));
     const req = indexedDB.open(AUDIO_DB_NAME, 1);
     req.onerror = () => reject(req.error);
     req.onsuccess = () => resolve(req.result);

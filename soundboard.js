@@ -625,24 +625,34 @@
     } catch (_) {}
   }
 
-  function applyQuickAccessFromBoard(board) {
+  /**
+   * Load favourites/recents when a board is set. board.quickAccess (ZIP/JSON/save) wins
+   * over per-board localStorage when present; otherwise use localStorage legacy keys.
+   */
+  function loadQuickAccessForBoard(board) {
     const qa = board && typeof board === 'object' ? board.quickAccess : null;
-    if (!qa) return;
-    try {
-      const favs = Array.isArray(qa.favourites) ? qa.favourites.map((id) => String(id)) : null;
-      const recs = Array.isArray(qa.recents) ? qa.recents.map((id) => String(id)) : null;
-      if (favs) {
+    if (qa && typeof qa === 'object') {
+      try {
+        const favs = Array.isArray(qa.favourites)
+          ? qa.favourites.map((id) => String(id).trim()).filter(Boolean)
+          : [];
+        const recs = Array.isArray(qa.recents)
+          ? qa.recents.map((id) => String(id).trim()).filter(Boolean).slice(0, MAX_RECENT_SOUNDS)
+          : [];
         favouriteIds = new Set(favs);
-        // Mirror to legacy localStorage so other code paths see the same state.
-        saveFavourites();
-      }
-      if (recs) {
         recentIds = recs;
+        saveFavourites();
         saveRecents();
+        console.info('[soundboard] quickAccess: loaded from board (' + favs.length + ' favourites, ' + recs.length + ' recents)');
+      } catch (err) {
+        console.warn('soundboard: loadQuickAccessForBoard failed', err);
+        favouriteIds = loadFavourites();
+        recentIds = loadRecents();
       }
-    } catch (err) {
-      console.warn('soundboard: applyQuickAccessFromBoard failed', err);
+      return;
     }
+    favouriteIds = loadFavourites();
+    recentIds = loadRecents();
   }
 
   function loadQuickAccessCollapsedState() {
@@ -1189,16 +1199,15 @@
     });
   }
 
-  function getQuickAccessSounds(filteredSounds) {
+  function getQuickAccessSounds() {
     const source = currentBoard && Array.isArray(currentBoard.sounds) ? currentBoard.sounds : [];
     const byId = new Map(source.map((s) => [String(s.id), s]));
-    const visibleIds = new Set((Array.isArray(filteredSounds) ? filteredSounds : []).map((s) => String(s.id)));
     const favourites = Array.from(favouriteIds)
       .map((id) => byId.get(id))
-      .filter((s) => !!s && visibleIds.has(String(s.id)));
+      .filter((s) => !!s);
     const recents = (recentIds || [])
       .map((id) => byId.get(id))
-      .filter((s) => !!s && visibleIds.has(String(s.id)));
+      .filter((s) => !!s);
     return { favourites, recents };
   }
 
@@ -1217,6 +1226,16 @@
     } catch (err) {
       console.warn('soundboard: syncQuickAccessToBoard failed', err);
     }
+  }
+
+  function formatImportStatusMessage(soundCount, options) {
+    const n = Number(soundCount) || 0;
+    const fav = options && options.favourites != null ? Number(options.favourites) : favouriteIds.size;
+    const rec = options && options.recents != null ? Number(options.recents) : (recentIds || []).length;
+    const soundWord = n === 1 ? 'sound' : 'sounds';
+    const favWord = fav === 1 ? 'favourite' : 'favourites';
+    const recWord = rec === 1 ? 'recent' : 'recents';
+    return 'Imported board (' + n + ' ' + soundWord + ', ' + fav + ' ' + favWord + ', ' + rec + ' ' + recWord + ').';
   }
 
   function toggleFavourite(sound) {
@@ -1328,7 +1347,7 @@
     saveToStorage();
   }
 
-  function renderQuickAccess(filteredSounds, hotkeyCounts) {
+  function renderQuickAccess(hotkeyCounts) {
     if (!quickAccessEl || !UI || !UI.renderHorizontalStrip) return;
     const labels = {
       favourites: t('quickAccess.favourites') || 'Favourites',
@@ -1346,7 +1365,7 @@
     if (favouriteTitle) favouriteTitle.textContent = labels.favourites;
     if (recentTitle) recentTitle.textContent = labels.recents;
 
-    const strips = getQuickAccessSounds(filteredSounds);
+    const strips = getQuickAccessSounds();
     const hasFavourites = strips.favourites.length > 0;
     const hasRecents = strips.recents.length > 0;
     if (favouritesSectionEl) favouritesSectionEl.hidden = false;
@@ -2019,9 +2038,7 @@
     }
     categoryUiState = loadCategoryUiState();
     categoryOrder = loadCategoryOrder();
-    favouriteIds = loadFavourites();
-    recentIds = loadRecents();
-    applyQuickAccessFromBoard(board);
+    loadQuickAccessForBoard(board);
     quickAccessCollapsed = loadQuickAccessCollapsedState();
     favouriteReorderMode = false;
     reorderMode = false;
@@ -2096,7 +2113,7 @@
       onToggleFavorite: toggleFavourite
     };
     updateSearchCount(filtered.length, Array.isArray(allSounds) ? allSounds.length : 0);
-    renderQuickAccess(filtered, hotkeyCounts);
+    renderQuickAccess(hotkeyCounts);
 
     if (!Array.isArray(allSounds) || allSounds.length === 0) {
       UI.renderGrid(gridEl, [], playingId, errorIds, onPlay, onEditSound, reorderMode, reorderSounds, sharedRenderOptions);

@@ -76,10 +76,52 @@
   const importModeMergeEl = document.getElementById('import-mode-merge');
   const importModeReplaceEl = document.getElementById('import-mode-replace');
 
-  function getBoardJsonPath() {
+  const DEFAULT_BOARD_REL = 'boards/from-blerp/board.json';
+  const DEFAULT_BOARD_ID = 'default-from-blerp';
+  const LEGACY_EMPTY_BOARD_IDS = new Set(['default-empty-board', 'default']);
+
+  function getAppBasePath() {
     const base = window.location.pathname.replace(/\/[^/]*$/, '') || '/';
-    return base + (base.endsWith('/') ? '' : '/') + 'boards/from-blerp/board.json';
+    if (base === '/') return '';
+    return base.endsWith('/') ? base.slice(0, -1) : base;
   }
+
+  function resolveBundledAssetUrl(url) {
+    if (!url || typeof url !== 'string') return url;
+    if (/^(https?:|data:|blob:|local:|local-image:|zip:)/i.test(url)) return url;
+    if (url.startsWith('/')) return url;
+    const base = getAppBasePath();
+    const path = url.replace(/^\.\//, '');
+    return base ? base + '/' + path : path;
+  }
+
+  function getBoardJsonPath() {
+    return resolveBundledAssetUrl(DEFAULT_BOARD_REL);
+  }
+
+  function shouldPreferBundledDefault(saved) {
+    if (!saved) return true;
+    if (!Board.validateBoard(saved).ok) return true;
+    const sounds = Array.isArray(saved.sounds) ? saved.sounds : [];
+    if (sounds.length === 0) return true;
+    const id = saved.id != null ? String(saved.id) : '';
+    if (LEGACY_EMPTY_BOARD_IDS.has(id)) return true;
+    return false;
+  }
+
+  function normalizeBundledBoardPaths(board) {
+    if (!board || !Array.isArray(board.sounds)) return board;
+    board.sounds.forEach(function (s) {
+      if (s && s.fileUrl) s.fileUrl = resolveBundledAssetUrl(s.fileUrl);
+      if (s && s.imageUrl) s.imageUrl = resolveBundledAssetUrl(s.imageUrl);
+    });
+    return board;
+  }
+
+  window.SoundboardAssets = {
+    getAppBasePath: getAppBasePath,
+    resolveUrl: resolveBundledAssetUrl
+  };
 
   const CATEGORY_UI_KEY_PREFIX = 'soundboard-category-state:';
   const CATEGORY_ORDER_KEY_PREFIX = 'soundboard-category-order:';
@@ -1875,7 +1917,7 @@
       : Promise.resolve(Storage && Storage.loadBoard ? Storage.loadBoard() : null);
 
     latestPromise.then((saved) => {
-      if (saved && Board.validateBoard(saved).ok) {
+      if (saved && Board.validateBoard(saved).ok && !shouldPreferBundledDefault(saved)) {
         const soundCount = Array.isArray(saved.sounds) ? saved.sounds.length : 0;
         console.info('[soundboard] load: restored saved board (' + soundCount + ' sounds, updatedAt=' + (saved.updatedAt || 'n/a') + ')');
         if (downloadStatus) {
@@ -1893,7 +1935,7 @@
         const validation = Board.validateBoard(saved);
         console.warn('[soundboard] load: saved board failed validation', validation && validation.error);
       } else {
-        console.info('[soundboard] load: no saved board found in localStorage or IndexedDB; loading sample.');
+        console.info('[soundboard] load: no saved board (or empty legacy board); loading bundled default.');
       }
       loadSampleBoardOrEmpty();
     }).catch((err) => {
@@ -1904,12 +1946,27 @@
 
   function loadSampleBoardOrEmpty() {
     const url = getBoardJsonPath();
-    fetch(url)
+    fetch(url, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error('Failed to load board'))))
       .then((data) => {
         const result = Board.validateBoard(data);
         if (!result.ok) throw new Error(result.error);
-        setBoard(Board.normalizeBoard(data));
+        const board = Board.normalizeBoard(data);
+        if (!board.id || LEGACY_EMPTY_BOARD_IDS.has(String(board.id))) {
+          board.id = DEFAULT_BOARD_ID;
+        }
+        normalizeBundledBoardPaths(board);
+        setBoard(board);
+        saveToStorageNow();
+        if (downloadStatus) {
+          const n = Array.isArray(board.sounds) ? board.sounds.length : 0;
+          downloadStatus.textContent = 'Loaded default board (' + n + ' sound' + (n === 1 ? '' : 's') + ').';
+          setTimeout(function () {
+            if (downloadStatus && downloadStatus.textContent && downloadStatus.textContent.startsWith('Loaded default board')) {
+              downloadStatus.textContent = '';
+            }
+          }, 3000);
+        }
       })
       .catch((err) => {
         console.warn('soundboard: load board failed', err);
@@ -1959,7 +2016,7 @@
 
   function resolveImageUrl(url) {
     if (!url) return '';
-    if (!isLocalImageRef(url)) return url;
+    if (!isLocalImageRef(url)) return resolveBundledAssetUrl(url);
     const id = localImageIdOf(url);
     return resolvedImageUrls.get(id) || '';
   }

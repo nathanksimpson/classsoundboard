@@ -45,7 +45,7 @@ function extractZip(zipPath, destDir) {
 
 function rewriteBoardPaths(board) {
   if (!board || !Array.isArray(board.sounds)) return board;
-  board.id = board.id || 'default-from-blerp';
+  board.id = 'default-from-blerp';
   for (const s of board.sounds) {
     if (typeof s.fileUrl === 'string' && s.fileUrl.startsWith('zip:')) {
       const rel = s.fileUrl.slice(4);

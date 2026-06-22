@@ -147,7 +147,10 @@ async function loadBuffer(fileUrl) {
       ab = await LocalAudio.getBlob(blobId);
       if (!ab) return null;
     } else {
-      const res = await fetch(fileUrl);
+      const fetchUrl = (typeof fileUrl === 'string' && window.SoundboardAssets && window.SoundboardAssets.resolveUrl)
+        ? window.SoundboardAssets.resolveUrl(fileUrl)
+        : fileUrl;
+      const res = await fetch(fetchUrl);
       if (!res.ok) throw new Error(res.statusText);
       ab = await res.arrayBuffer();
     }

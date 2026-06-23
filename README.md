@@ -11,7 +11,7 @@ A client-side soundboard that loads boards from JSON and plays audio with low la
 
 ## Default board
 
-First-time visitors (and **Clear All Data**) load **From Blerp** — 101 sounds with categories, hotkeys, favourites, and tile images bundled under:
+First-time visitors (and **Clear All Data**) load **From Blerp** — 102 sounds with categories, hotkeys, favourites, and tile images bundled under:
 
 - `boards/from-blerp/board.json` — Board definition
 - `boards/from-blerp/audio/` — MP3 files
@@ -48,6 +48,6 @@ To copy a board from Blerp.com, use the **Blerp Scraper** app (separate folder i
 - `board-manager.js` — Load/validate board JSON, normalize state
 - `ui-renderer.js` — Render grid and tiles
 - `storage.js` — localStorage save/restore
-- `boards/from-blerp/` — Bundled default board (101 sounds)
+- `boards/from-blerp/` — Bundled default board (102 sounds)
 - `boards/sample-board.json` — Empty fallback if default fetch fails
 - `tools/import-default-board.js` — Regenerate bundled default from a portable ZIP

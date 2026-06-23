@@ -239,8 +239,8 @@
       'status.analyzeComplete': 'Analyze complete.',
       'status.invalidImportFile': 'Please drop a valid .json or .zip board file.',
       'status.clearedAllData': 'All saved data cleared. Loaded default board.',
-      'status.mergedImport': 'Merged: {added} added, {skipped} skipped (duplicate IDs).',
-      'status.mergedImportHotkeys': 'Merged: {added} added, {skipped} skipped. {hotkeyConflicts} hotkey conflicts cleared.',
+      'status.mergedImport': 'Merged: {added} added, {skipped} already on board (your settings kept).',
+      'status.mergedImportHotkeys': 'Merged: {added} added, {skipped} kept. {hotkeyConflicts} hotkey conflicts cleared.',
       'status.reinitialized': 'Reinitialized — {count} sounds ready.',
       'status.reinitializedMissing': 'Reinitialized — {missing} sound(s) missing local audio.',
       'status.saveFailedHint': 'Save failed. Storage may be full — try Export Portable ZIP or Clear All Data.',
@@ -353,8 +353,8 @@
       'status.analyzeComplete': '분석 완료.',
       'status.invalidImportFile': '올바른 .json 또는 .zip 보드 파일을 드롭해 주세요.',
       'status.clearedAllData': '저장된 모든 데이터를 삭제하고 기본 보드를 불러왔습니다.',
-      'status.mergedImport': '병합됨: {added}개 추가, {skipped}개 건너뜀(중복 ID).',
-      'status.mergedImportHotkeys': '병합됨: {added}개 추가, {skipped}개 건너뜀. 단축키 충돌 {hotkeyConflicts}개 해제.',
+      'status.mergedImport': '병합됨: {added}개 추가, {skipped}개는 이미 보드에 있음(설정 유지).',
+      'status.mergedImportHotkeys': '병합됨: {added}개 추가, {skipped}개 유지. 단축키 충돌 {hotkeyConflicts}개 해제.',
       'status.reinitialized': '재초기화됨 — {count}개 사운드 준비 완료.',
       'status.reinitializedMissing': '재초기화됨 — 로컬 오디오 없음 {missing}개.',
       'status.saveFailedHint': '저장 실패. 저장 공간이 부족할 수 있습니다 — 휴대용 ZIP 내보내기 또는 전체 데이터 삭제를 시도하세요.',
@@ -3750,7 +3750,7 @@
     if (!file) return;
     if (downloadStatus) downloadStatus.textContent = 'Reading zip…';
     try {
-      const parsed = await parsePortableZipFile(file);
+      const parsed = await parsePortableZipFile(file, options);
       if (!parsed) return;
       finishBoardImport(parsed.board, {
         fromFileMode: !!(options && options.fromFileMode),
@@ -3767,7 +3767,7 @@
     }
   }
 
-  async function parsePortableZipFile(file) {
+  async function parsePortableZipFile(file, options) {
     if (!file) return null;
     if (!window.JSZip) {
       alert('ZIP import not available (JSZip missing).');
@@ -3798,10 +3798,18 @@
     const sounds = Array.isArray(board.sounds) ? board.sounds : [];
     const importNonce = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
     const warnings = [];
+    const opts = options && typeof options === 'object' ? options : {};
+    const importMode = opts.fromFileMode ? 'replace' : getImportMode();
+    let newSoundIds = null;
+    if (importMode === 'merge' && currentBoard && Board.getNewIncomingSoundIds) {
+      newSoundIds = Board.getNewIncomingSoundIds(currentBoard, board);
+    }
     let i = 0;
+    const extractTotal = newSoundIds ? newSoundIds.size : sounds.length;
     for (const s of sounds) {
+      if (newSoundIds && !newSoundIds.has(String(s.id))) continue;
       i++;
-      if (downloadStatus) downloadStatus.textContent = 'Importing ' + i + '/' + sounds.length + '…';
+      if (downloadStatus) downloadStatus.textContent = 'Importing ' + i + '/' + extractTotal + '…';
 
       const fu = String(s.fileUrl || '');
       if (fu.startsWith('zip:')) {

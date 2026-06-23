@@ -141,6 +141,94 @@ function ensureUniqueSoundId(existingIds, sound) {
 
 const RECENTS_MAX_DEFAULT = 20;
 
+function normalizeRemoteUrl(url) {
+  try {
+    const u = new URL(String(url));
+    return (u.protocol + '//' + u.host + u.pathname).toLowerCase();
+  } catch (_) {
+    return '';
+  }
+}
+
+/**
+ * Audio basename without extension (stable key for zip/http/local paths).
+ */
+function getAudioBasename(fileUrl, soundId) {
+  const fu = String(fileUrl || '').trim();
+  if (!fu) return '';
+  if (fu.startsWith('local:downloaded-')) {
+    return fu.slice('local:downloaded-'.length);
+  }
+  if (fu.startsWith('local:')) {
+    const blobId = fu.slice(6);
+    if (blobId.startsWith('downloaded-')) return blobId.slice('downloaded-'.length);
+    if (soundId) return String(soundId);
+    return '';
+  }
+  let pathPart = fu;
+  if (fu.startsWith('zip:')) pathPart = fu.slice(4);
+  pathPart = pathPart.split('?')[0].split('#')[0];
+  const base = pathPart.split('/').pop() || '';
+  if (!base) return '';
+  return base.replace(/\.[^.]+$/, '');
+}
+
+/**
+ * Keys used to detect the same sound across imports (id, blerpId, audio basename, remote URL).
+ */
+function getSoundMatchKeys(sound) {
+  const keys = [];
+  const s = normalizeSound(sound);
+  if (s.id) keys.push('id:' + s.id);
+  const extra = s.extra && typeof s.extra === 'object' ? s.extra : {};
+  if (extra.blerpId) keys.push('blerp:' + String(extra.blerpId).trim());
+  const audioBase = getAudioBasename(s.fileUrl, s.id);
+  if (audioBase) keys.push('audio:' + audioBase);
+  const fu = s.fileUrl;
+  if (fu && /^https?:/i.test(fu)) {
+    const norm = normalizeRemoteUrl(fu);
+    if (norm) keys.push('url:' + norm);
+  }
+  return keys;
+}
+
+/** Map matchKey -> existing sound id */
+function buildSoundMatchIndex(sounds) {
+  const index = new Map();
+  (sounds || []).forEach((raw) => {
+    const s = normalizeSound(raw);
+    const sid = String(s.id);
+    getSoundMatchKeys(s).forEach((k) => {
+      if (!index.has(k)) index.set(k, sid);
+    });
+  });
+  return index;
+}
+
+function findExistingSoundIdForIncoming(incomingSound, matchIndex) {
+  if (!matchIndex || !matchIndex.size) return null;
+  const keys = getSoundMatchKeys(incomingSound);
+  for (let i = 0; i < keys.length; i++) {
+    const k = keys[i];
+    if (matchIndex.has(k)) return matchIndex.get(k);
+  }
+  return null;
+}
+
+/** Incoming sound ids that are not already on the board (for ZIP blob extraction). */
+function getNewIncomingSoundIds(existing, incoming) {
+  const base = normalizeBoard(existing && typeof existing === 'object' ? existing : { sounds: [] });
+  const inc = normalizeBoard(incoming && typeof incoming === 'object' ? incoming : { sounds: [] });
+  const matchIndex = buildSoundMatchIndex(base.sounds);
+  const ids = new Set();
+  (inc.sounds || []).forEach((raw) => {
+    const sound = normalizeSound(raw);
+    if (findExistingSoundIdForIncoming(sound, matchIndex)) return;
+    ids.add(String(sound.id));
+  });
+  return ids;
+}
+
 /**
  * Merge incoming board sounds into existing board.
  * options.duplicateStrategy: 'skip' | 'replace' | 'rename' (default 'skip')
@@ -155,6 +243,7 @@ function mergeBoards(existing, incoming, options) {
   const inc = normalizeBoard(incoming && typeof incoming === 'object' ? incoming : { sounds: [] });
   const merged = JSON.parse(JSON.stringify(base));
   const existingIds = new Set((merged.sounds || []).map((s) => String(s.id)));
+  const matchIndex = buildSoundMatchIndex(merged.sounds);
   const existingHotkeys = new Map();
   (merged.sounds || []).forEach((s) => {
     const hk = String(s.hotkey || '').trim();
@@ -164,22 +253,29 @@ function mergeBoards(existing, incoming, options) {
   let added = 0;
   let skipped = 0;
   let hotkeyConflicts = 0;
+  let matchedById = 0;
+  let matchedByKey = 0;
 
   (inc.sounds || []).forEach((rawSound) => {
     const sound = normalizeSound(rawSound);
     const id = String(sound.id);
+    const matchedExistingId = findExistingSoundIdForIncoming(sound, matchIndex);
+    const isDuplicate = matchedExistingId != null || existingIds.has(id);
 
-    if (existingIds.has(id)) {
-      if (duplicateStrategy === 'replace') {
+    if (isDuplicate) {
+      if (duplicateStrategy === 'replace' && existingIds.has(id)) {
         const idx = merged.sounds.findIndex((s) => String(s.id) === id);
         if (idx >= 0) merged.sounds[idx] = sound;
         added++;
-      } else if (duplicateStrategy === 'rename') {
+      } else if (duplicateStrategy === 'rename' && !matchedExistingId) {
         const unique = ensureUniqueSoundId(existingIds, sound);
         merged.sounds.push(unique);
         existingIds.add(unique.id);
+        getSoundMatchKeys(unique).forEach((k) => { if (!matchIndex.has(k)) matchIndex.set(k, unique.id); });
         added++;
       } else {
+        if (matchedExistingId && matchedExistingId !== id) matchedByKey++;
+        else if (existingIds.has(id)) matchedById++;
         skipped++;
       }
       return;
@@ -195,6 +291,7 @@ function mergeBoards(existing, incoming, options) {
 
     merged.sounds.push(sound);
     existingIds.add(sound.id);
+    getSoundMatchKeys(sound).forEach((k) => { if (!matchIndex.has(k)) matchIndex.set(k, sound.id); });
     added++;
   });
 
@@ -224,7 +321,7 @@ function mergeBoards(existing, incoming, options) {
 
   return {
     board: merged,
-    stats: { added, skipped, hotkeyConflicts }
+    stats: { added, skipped, hotkeyConflicts, matchedById, matchedByKey }
   };
 }
 
@@ -236,5 +333,9 @@ window.SoundboardBoardManager = {
   generateId,
   createDefaultSound,
   ensureUniqueSoundId,
+  getSoundMatchKeys,
+  buildSoundMatchIndex,
+  findExistingSoundIdForIncoming,
+  getNewIncomingSoundIds,
   mergeBoards
 };

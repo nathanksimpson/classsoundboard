@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Soundboard — Sign in</title>
+  <style>
+    :root {
+      --bg: #f7f7fb; --surface: #ffffff; --text: #0f172a; --text-muted: #475569;
+      --primary: #2563eb; --danger: #dc2626; --border: rgba(15, 23, 42, 0.14);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0b1020; --surface: #141a2e; --text: #e5e7eb; --text-muted: #9ca3af;
+        --primary: #60a5fa; --danger: #f87171; --border: rgba(229, 231, 235, 0.16);
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px;
+      background: var(--bg); color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+    }
+    .card {
+      width: 100%; max-width: 360px; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 28px 24px; box-shadow: 0 8px 30px rgba(2, 6, 23, 0.12);
+    }
+    .mark { font-size: 32px; line-height: 1; margin-bottom: 12px; }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    p { margin: 0 0 20px; color: var(--text-muted); font-size: 14px; line-height: 1.5; }
+    label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+    input[type=password] {
+      width: 100%; min-height: 44px; padding: 10px 12px; font-size: 16px; border-radius: 8px;
+      border: 1px solid var(--border); background: var(--bg); color: var(--text);
+    }
+    input[type=password]:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
+    button {
+      width: 100%; min-height: 44px; margin-top: 14px; border: 0; border-radius: 8px;
+      background: var(--primary); color: #fff; font-size: 15px; font-weight: 600; cursor: pointer;
+    }
+    .error { color: var(--danger); font-size: 13px; margin: 10px 0 0; min-height: 1em; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="mark" aria-hidden="true">🔊</div>
+    <h1>Class Soundboard</h1>
+    <p>Enter the team password. This computer stays signed in for six months.<br>팀 비밀번호를 입력하세요.</p>
+    <form method="post" action="/login">
+      <label for="password">Team password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+      <input type="hidden" name="return" id="return" value="/">
+      <button type="submit">Sign in</button>
+      <p class="error" id="error" role="alert"></p>
+    </form>
+  </main>
+  <script>
+    (function () {
+      var q = new URLSearchParams(location.search);
+      var ret = q.get('return');
+      if (ret && ret.charAt(0) === '/' && ret.charAt(1) !== '/') document.getElementById('return').value = ret;
+      var err = q.get('error');
+      var msg = err === 'wrong' ? 'That password is not right. 비밀번호가 맞지 않습니다.'
+        : err === 'locked' ? 'Too many tries. Wait 15 minutes and try again.'
+        : '';
+      document.getElementById('error').textContent = msg;
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,34 @@
+{
+  // Class Soundboard — standalone Worker. Deploy: see README.md.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "classsoundboard",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    // Every request goes through the Worker first so the team password is checked.
+    "run_worker_first": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "classsoundboard",
+      "database_id": "bd5d777b-49e7-4fc0-b2fd-47100a4cb2bb",
+      "migrations_dir": "migrations"
+    },
+    {
+      // TEMPORARY: ClassManager's database, read once to copy the existing
+      // soundboard across (src/soundboard.js importLegacyBoardIfEmpty).
+      // Delete this block after the first deploy has run.
+      "binding": "LEGACY_DB",
+      "database_name": "calendar-team",
+      "database_id": "002a1ed6-f90b-425e-a4a7-518d07c4040d"
+    }
+  ],
+  "observability": { "enabled": true }
+  // Secrets (set once, never committed):
+  //   npx wrangler secret put TEAM_PASSWORD
+  //   npx wrangler secret put SESSION_SECRET
+}

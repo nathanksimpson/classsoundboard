@@ -1,0 +1,18 @@
+{
+  "name": "classsoundboard",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Class Soundboard — shared team soundboard on a Cloudflare Worker",
+  "scripts": {
+    "dev": "wrangler d1 migrations apply classsoundboard --local && wrangler dev",
+    "deploy": "wrangler d1 migrations apply classsoundboard --remote && wrangler deploy",
+    "test": "node scripts/run-tests.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "4.100.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

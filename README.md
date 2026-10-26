@@ -1,53 +1,80 @@
-# Sound Board App
+# Class Soundboard
 
-A client-side soundboard that loads boards from JSON and plays audio with low latency (Web Audio API). No backend required.
+A shared classroom soundboard on its own Cloudflare Worker. Every computer
+sees the same board: add, edit or upload a sound on one computer and the
+others pick it up within about 15 seconds (or as soon as you switch back to
+the tab).
 
-## How to run
+- **Sign-in:** one team password. Each computer stays signed in for 6 months.
+  Changing the password signs every computer out.
+- **Storage:** Cloudflare D1 database `classsoundboard`. The board is one JSON
+  row; uploaded audio and images are stored once (by content hash) and
+  shared by every computer. Browsers only keep a cache.
+- **Hotkeys:** work with the 한글 keyboard on, after using the volume slider,
+  with quick overlapping taps, and for several Shift+ shortcuts in a row.
 
-- **Option A (recommended):** Use a local server so the bundled default board loads correctly.
-  - From this folder run: `npx serve` (or `python -m http.server 8080`)
-  - Open http://localhost:3000 (or 8080)
-- **Option B:** Open `index.html` directly. The default board may not load over `file://` (browser security blocks audio/image fetches). Use **Import Board** to load a JSON or portable ZIP instead.
+## First deploy (one time)
 
-## Default board
+The database is already created and has its tables. You need to set the
+password and publish the Worker. Either way works:
 
-First-time visitors (and **Clear All Data**) load **From Blerp** — 102 sounds with categories, hotkeys, favourites, and tile images bundled under:
+### Option A — from the Cloudflare dashboard (no installs)
 
-- `boards/from-blerp/board.json` — Board definition
-- `boards/from-blerp/audio/` — MP3 files
-- `boards/from-blerp/images/` — Tile images
+1. Cloudflare dashboard → **Workers & Pages** → **Create** → **Import a repository**.
+2. Pick `nathanksimpson/classsoundboard`, production branch **`cloudflare-worker`**.
+   Leave the build command empty; deploy command `npx wrangler deploy`.
+3. After it's created: the Worker → **Settings → Variables and Secrets** → add two **Secrets**:
+   - `TEAM_PASSWORD` — the password teachers will type.
+   - `SESSION_SECRET` — any long random text (40+ characters). Nobody types this.
+4. **Deployments → Retry/redeploy** so the secrets take effect.
+5. Open the `…workers.dev` address it shows and sign in.
 
-To refresh the bundled default from a portable ZIP:
+### Option B — from a PC with Node.js 20+
 
 ```bash
-node tools/import-default-board.js "path/to/your-portable.zip"
+npm install
+npx wrangler login
+npx wrangler secret put TEAM_PASSWORD
+npx wrangler secret put SESSION_SECRET
+npm run deploy
 ```
 
-## Features
+## Moving over from ClassManager
 
-- **Grid of sounds** — Click to play. Right-click a tile to edit.
-- **Add / Edit / Delete** — Toolbar: Add Sound. Modal: Title, Audio URL, Image URL, Category, Hotkey, Volume, Start/End (trim).
-- **Import / Export** — Import Board (JSON or portable ZIP), Export Board (JSON), Export Portable ZIP (board + audio + images).
-- **Favourites & recents** — Starred sounds and recent plays are stored on the board as `quickAccess` (`favourites` and `recents` sound IDs). They are included in JSON export, portable ZIP (`board.json`), and browser save. Re-export after changing favourites so shared files stay up to date.
-- **Storage** — Changes are saved to the browser’s localStorage / IndexedDB.
-- **Hotkeys** — Set a hotkey (e.g. Q) in the editor; press that key to play.
+- **The board copies itself.** The first time anyone signs in, the Worker reads
+  the soundboard from ClassManager's database (`LEGACY_DB` in `wrangler.jsonc`)
+  — but only if this site has no board yet, so it never overwrites anything.
+  Sounds whose audio was saved in a single browser are restored from the
+  built-in default board where possible.
+- **After that first sign-in, delete the `LEGACY_DB` block** from
+  `wrangler.jsonc` and deploy again, so this Worker no longer has access to
+  ClassManager's data.
+- **Sounds saved only on one computer:** on that computer, open the *old*
+  soundboard (`classmanager.live/soundboard`) → menu → **Export portable ZIP**.
+  Then on the new site → **Import** → **Merge into board** → choose the ZIP.
+  Those sounds are uploaded once and then play on every computer. Do this
+  before the soundboard is removed from ClassManager.
 
-## Blerp export
+## Day to day
 
-To copy a board from Blerp.com, use the **Blerp Scraper** app (separate folder in this repo):
+- **Download media** (menu): copies sounds that still stream from Blerp into
+  your own storage, so they keep working if Blerp changes.
+- **Clear All Data**: clears only *this computer's* cached copy and reloads the
+  shared board. To replace the shared board, use Import → Replace entire board.
+- **Sign out**: menu → Sign out.
 
-1. Open the **Blerp Scraper** folder and read its README, or open `Blerp Scraper/index.html` for instructions and a “Copy script” button.
-2. On https://blerp.com/my-stream, log in, open Developer Tools (F12) → Console, paste the script, and press Enter.
-3. If sounds are found, a JSON file downloads. Use **Import Board** in this app to load it, or export a portable ZIP and run `tools/import-default-board.js` to replace the bundled default.
-4. If nothing downloads, run `BlerpExport.debug()` in the Blerp console and check the output.
+## Develop
 
-## File layout
+```bash
+cp .dev.vars.example .dev.vars   # set a local password
+npm install
+npm run dev                      # http://localhost:8787
+npm test                         # node tests (no install needed)
+```
 
-- `index.html`, `styles.css`, `soundboard.js` — Main app
-- `audio-engine.js` — Web Audio: load, cache, play with trim/volume
-- `board-manager.js` — Load/validate board JSON, normalize state
-- `ui-renderer.js` — Render grid and tiles
-- `storage.js` — localStorage save/restore
-- `boards/from-blerp/` — Bundled default board (102 sounds)
-- `boards/sample-board.json` — Empty fallback if default fetch fails
-- `tools/import-default-board.js` — Regenerate bundled default from a portable ZIP
+Layout: `public/` is the app (served as static assets, behind the password),
+`src/index.js` routing + sign-in, `src/soundboard.js` board/media storage,
+`src/auth.js` signed session cookies, `migrations/` database schema.
+
+Limits: 15 MB per uploaded file; 10 wrong passwords per IP per 15 minutes
+locks sign-in from that IP for 15 minutes.

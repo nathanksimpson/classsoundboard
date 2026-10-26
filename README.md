@@ -21,7 +21,7 @@ password and publish the Worker. Either way works:
 ### Option A — from the Cloudflare dashboard (no installs)
 
 1. Cloudflare dashboard → **Workers & Pages** → **Create** → **Import a repository**.
-2. Pick `nathanksimpson/classsoundboard`, production branch **`cloudflare-worker`**.
+2. Pick `nathanksimpson/classsoundboard`, production branch **`main`**.
    Leave the build command empty; deploy command `npx wrangler deploy`.
 3. After it's created: the Worker → **Settings → Variables and Secrets** → add two **Secrets**:
    - `TEAM_PASSWORD` — the password teachers will type.

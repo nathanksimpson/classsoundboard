@@ -1436,6 +1436,17 @@ body.body--overlay-open {
   margin-top: 4px;
 }
 
+/* Keep Save / Cancel / Delete on screen while the rest of the form scrolls. */
+.modal__form > .modal__actions:last-child {
+  position: sticky;
+  bottom: -20px;
+  z-index: 2;
+  margin: 4px -20px -20px;
+  padding: 12px 20px calc(12px + var(--safe-bottom));
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+
 .blerp-modal__help {
   margin: 0 0 12px 0;
   font-size: 0.9rem;
@@ -1783,8 +1794,7 @@ body.body--overlay-open {
     max-height: min(96vh, var(--panel-mobile-max-height));
   }
 
-  .settings-screen__panel,
-  .modal__panel {
+  .settings-screen__panel {
     max-height: var(--panel-mobile-max-height);
   }
 
@@ -1792,15 +1802,6 @@ body.body--overlay-open {
     padding-bottom: calc(16px + 70px + var(--safe-bottom));
   }
 
-  .modal__panel {
-    padding-bottom: calc(20px + 70px + var(--safe-bottom));
-  }
-
-  .modal {
-    align-items: flex-start;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-  }
 
   .settings-screen__header {
     flex-direction: column;

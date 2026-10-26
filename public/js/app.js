@@ -766,6 +766,7 @@
     editingId = sound.id;
     pendingAudioBlob = null;
     modal.hidden = false;
+    syncOverlayScrollLock();
     modal.setAttribute('aria-hidden', 'false');
     modalError.textContent = '';
     modalForm.title.value = sound.title || '';
@@ -800,9 +801,16 @@
     });
   }
 
+  /** Stop the page behind a popup from scrolling while any popup is open. */
+  function syncOverlayScrollLock() {
+    const open = (modal && !modal.hidden) || (blerpModal && !blerpModal.hidden);
+    document.body.classList.toggle('body--overlay-open', !!open);
+  }
+
   function closeModal() {
     modal.hidden = true;
     modal.setAttribute('aria-hidden', 'true');
+    syncOverlayScrollLock();
     editingId = null;
     pendingAudioBlob = null;
     Audio.stopSound('preview');
@@ -811,6 +819,7 @@
   function openBlerpModal() {
     if (!blerpModal) return;
     blerpModal.hidden = false;
+    syncOverlayScrollLock();
     blerpModal.setAttribute('aria-hidden', 'false');
     if (blerpModalError) blerpModalError.textContent = '';
     if (blerpModalStatus) blerpModalStatus.textContent = '';
@@ -830,6 +839,7 @@
   function closeBlerpModal() {
     if (!blerpModal) return;
     blerpModal.hidden = true;
+    syncOverlayScrollLock();
     blerpModal.setAttribute('aria-hidden', 'true');
     if (blerpModalError) blerpModalError.textContent = '';
     if (blerpModalStatus) blerpModalStatus.textContent = '';

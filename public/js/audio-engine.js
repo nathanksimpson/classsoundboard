@@ -22,6 +22,30 @@ let ctxGeneration = 0;
 /** Set when the sound output changed while something was playing; handled on the next play. */
 let rebuildPending = false;
 let rebuildInFlight = null;
+/** iPad/Safari: start the next tap on a brand-new audio connection. */
+let freshOnNextGesture = false;
+let hiddenAt = 0;
+/** Away at least this long → assume Safari's audio may be silently dead. */
+const AWAY_REBUILD_MS = 1000;
+
+/**
+ * iPad, iPhone and Safari. On iPadOS every browser (Chrome too) uses Safari's
+ * engine: audio may only start inside a tap, and after switching apps it can
+ * claim to be running while making no sound.
+ */
+const IS_APPLE_WEBKIT = (function () {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  const iOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const desktopSafari = /Safari/.test(ua) && !/Chrome|Chromium|CriOS|Edg|OPR|Firefox|FxiOS/.test(ua);
+  return iOS || desktopSafari;
+})();
+
+// Safari 16.4+: treat the soundboard as media playback (plays even with the
+// silent switch on, and keeps its audio session like a music app would).
+try {
+  if (typeof navigator !== 'undefined' && navigator.audioSession) navigator.audioSession.type = 'playback';
+} catch (_) {}
 let masterVolume = MASTER_VOLUME_BASE_GAIN;
 let autoLevelEnabled = true;
 let masterGainNode = null;
@@ -55,7 +79,10 @@ function createContext() {
   ctx = c;
   ctxGeneration += 1;
   c.onstatechange = function () {
-    if (ctx === c) dispatchAudioEvent('soundboard-audio-state', { state: c.state });
+    if (ctx !== c) return;
+    // Safari's "interrupted" = another app, a call, Siri or the lock screen took the audio.
+    if (c.state === 'interrupted') freshOnNextGesture = true;
+    dispatchAudioEvent('soundboard-audio-state', { state: c.state });
   };
   return c;
 }
@@ -125,6 +152,7 @@ function rebuildContext(reason) {
     ensureMasterChain();
     if (c.state !== 'running') await settlesWithin(c.resume(), RESUME_TIMEOUT_MS);
     rebuildPending = false;
+    // Still muted (e.g. iPad, rebuilt outside a tap): the next tap resumes it.
     dispatchAudioEvent('soundboard-audio-restarted', { reason: reason, state: c.state });
     return { resumed: c.state === 'running', state: c.state, rebuilt: true };
   })().finally(function () {
@@ -541,19 +569,64 @@ function onSoundOutputChanged() {
   else rebuildPending = true;
 }
 
-/** The first click/key after coming back is when the browser lets audio restart. */
+/**
+ * Play one silent sample. Safari only fully switches audio on when something
+ * is started during a tap, so this does it at the moment of the tap.
+ */
+function primeOutput(c) {
+  if (!c || !IS_APPLE_WEBKIT) return;
+  try {
+    const buf = c.createBuffer(1, 1, c.sampleRate || 44100);
+    const src = c.createBufferSource();
+    src.buffer = buf;
+    src.connect(c.destination);
+    src.start(0);
+  } catch (_) {}
+}
+
+/**
+ * Runs at the very start of every tap/click/key press, before the sound's own
+ * handler. Everything here happens synchronously inside the tap, which is the
+ * only moment iPadOS allows audio to be (re)started.
+ */
 function unlockOnGesture() {
   if (rebuildInFlight) return;
-  if (ctx && ctx.state !== 'running') resumeContext();
+  if (freshOnNextGesture && activeSources.length === 0) {
+    freshOnNextGesture = false;
+    rebuildContext('back from another app');   // creates + resumes synchronously
+    primeOutput(ctx);
+    return;
+  }
+  if (ctx && ctx.state !== 'running') {
+    resumeContext();                            // calls resume() synchronously
+    primeOutput(ctx);
+  }
+}
+
+function onVisibilityChange() {
+  if (typeof document === 'undefined') return;
+  if (document.visibilityState === 'hidden') {
+    hiddenAt = Date.now();
+    return;
+  }
+  if (IS_APPLE_WEBKIT && ctx && hiddenAt && Date.now() - hiddenAt >= AWAY_REBUILD_MS) {
+    freshOnNextGesture = true;
+  }
+  hiddenAt = 0;
+  checkAudioHealth();
 }
 
 if (typeof window !== 'undefined' && window.addEventListener) {
   window.addEventListener('focus', checkAudioHealth);
-  window.addEventListener('pageshow', checkAudioHealth);
+  window.addEventListener('pageshow', function (e) {
+    // Restored from Safari's back/forward cache: the old audio is not trustworthy.
+    if (e && e.persisted && IS_APPLE_WEBKIT && ctx) freshOnNextGesture = true;
+    checkAudioHealth();
+  });
   ['pointerdown', 'keydown', 'touchend'].forEach(function (type) {
     document.addEventListener(type, unlockOnGesture, true);
   });
-  document.addEventListener('visibilitychange', checkAudioHealth);
+  document.addEventListener('visibilitychange', onVisibilityChange);
   if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
     navigator.mediaDevices.addEventListener('devicechange', onSoundOutputChanged);
   }
@@ -566,7 +639,9 @@ function getDebugInfo() {
     active: activeSources.length,
     cached: audioCache.size,
     currentTime: ctx ? ctx.currentTime : null,
-    rebuildPending: rebuildPending
+    rebuildPending: rebuildPending,
+    freshOnNextGesture: freshOnNextGesture,
+    appleWebKit: IS_APPLE_WEBKIT
   };
 }
 

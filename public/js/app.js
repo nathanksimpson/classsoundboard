@@ -533,6 +533,8 @@
     render();
   }
 
+  let playToken = 0;
+
   function startPlayback(sound, options) {
     if (!sound) return;
     const squelch = !options || options.squelch !== false;
@@ -549,16 +551,18 @@
     }
 
     playingId = sound.id;
+    const token = ++playToken;
     renderRecentsStripOnly(renderOpts);
     updatePlayingUiForId(sound.id, 'playing');
 
     playSoundWithFallback(sound).then(function () {
-      if (playingId === sound.id) {
+      // Only the latest play may switch the tile back to idle.
+      if (token === playToken && playingId === sound.id) {
         playingId = null;
         updatePlayingUiForId(sound.id, 'idle');
       }
     }).catch(function () {
-      handlePlayError(sound);
+      if (token === playToken) handlePlayError(sound);
     });
   }
 
@@ -1393,6 +1397,20 @@
     }
   }
 
+  /** The audio engine replaced a dead/stuck audio connection. */
+  function initAudioRecovery() {
+    window.addEventListener('soundboard-audio-restarted', function (e) {
+      const reason = e && e.detail && e.detail.reason;
+      // 'audio clock stopped' replays the same sound right away; keep its tile lit.
+      if (playingId != null && reason !== 'audio clock stopped') {
+        const id = playingId;
+        playingId = null;
+        updatePlayingUiForId(id, 'idle');
+      }
+      if (reason !== 'reinitialize button') setStatus('Sound restarted automatically.', 2500);
+    });
+  }
+
   function initHotkeyKeyboard() {
     if (!Hotkeys || !Hotkeys.initKeyboard) return;
     Hotkeys.initKeyboard({
@@ -1416,6 +1434,7 @@
   async function init() {
     wireEvents();
     initHotkeyKeyboard();
+    initAudioRecovery();
     favouriteStripRows = loadFavouriteStripRows();
     recentStripRows = loadRecentStripRows();
     setStatus('Loading board…');

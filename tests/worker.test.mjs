@@ -76,6 +76,17 @@ r = await call('/login');
 assert(r.status === 200 && assetsSeen.includes('/login'), 'sign-in page is public');
 assert(r.headers.get('X-Frame-Options') === 'DENY', 'security headers present');
 
+// Icons are public (home-screen icon + sign-in page), everything else isn't
+for (const p of ['/favicon.ico', '/apple-touch-icon.png', '/apple-touch-icon-precomposed.png', '/manifest.webmanifest', '/icon-512.png']) {
+    r = await call(p);
+    assert(r.status === 200 && /^asset \//.test(await r.text()), p + ' should be public');
+}
+assert(assetsSeen.includes('/apple-touch-icon.png'), 'precomposed falls back to the normal icon');
+r = await call('/icon-512.png', { method: 'POST' });
+assert(r.status !== 200 || !/^asset/.test(await r.text()), 'icons are read-only');
+r = await call('/index.html');
+assert(r.status === 303, 'the app itself still needs sign-in');
+
 // Wrong password, then right one
 r = await call('/login', form('nope'));
 assert(r.status === 303 && /error=wrong/.test(r.headers.get('Location')), 'wrong password');

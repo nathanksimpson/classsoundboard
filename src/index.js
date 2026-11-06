@@ -16,6 +16,21 @@ import {
 import { dbOne, dbRun } from './db.js';
 
 const MAX_BOARD_BODY_BYTES = 1000000;
+
+/**
+ * Icons and the web-app manifest are public: browsers and "Add to Home
+ * Screen" fetch them without the sign-in cookie, and the sign-in page uses them.
+ */
+const PUBLIC_ASSET_PATHS = new Set([
+    '/favicon.ico',
+    '/favicon.svg',
+    '/apple-touch-icon.png',
+    '/apple-touch-icon-precomposed.png',
+    '/icon-192.png',
+    '/icon-512.png',
+    '/icon-maskable-512.png',
+    '/manifest.webmanifest'
+]);
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_MAX_FAILURES = 10;
 
@@ -159,6 +174,11 @@ export default {
 
         if (path === '/healthz') {
             return json({ ok: true, auth: authConfigured(env) });
+        }
+        if (PUBLIC_ASSET_PATHS.has(path) && (request.method === 'GET' || request.method === 'HEAD')) {
+            const assetPath = path === '/apple-touch-icon-precomposed.png' ? '/apple-touch-icon.png' : path;
+            const res = await env.ASSETS.fetch(new Request(new URL(assetPath, url), request));
+            return withHeaders(res, { 'Cache-Control': 'public, max-age=86400' });
         }
         if (!authConfigured(env)) {
             return withHeaders(new Response(

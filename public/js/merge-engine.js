@@ -99,6 +99,7 @@
   }
 
   function mergeBoards(existing, incoming, options) {
+    const addedNow = new Date().toISOString();
     const S = Schema();
     const base = S.normalizeBoard(existing || { sounds: [] });
     const inc = S.normalizeBoard(incoming || { sounds: [] });
@@ -144,6 +145,7 @@
         hotkeys.set(hkNorm, sound.id);
       }
 
+      sound.addedAt = addedNow;
       merged.sounds.push(sound);
       existingIds.add(sound.id);
       getSoundMatchKeys(sound).forEach(function (k) {

@@ -25,6 +25,11 @@
   const favouritesCollapseToggleEl = document.getElementById('favourites-collapse-toggle');
   const recentsCountEl = document.getElementById('recents-count');
   const favouritesCountEl = document.getElementById('favourites-count');
+  const addedSectionEl = document.getElementById('added-section');
+  const addedStripEl = document.getElementById('added-strip');
+  const addedRowsSelectEl = document.getElementById('added-rows-select');
+  const addedCollapseToggleEl = document.getElementById('added-collapse-toggle');
+  const addedCountEl = document.getElementById('added-count');
   const boardNameEl = document.getElementById('board-name');
   const statusLine = document.getElementById('status-line');
   const searchInput = document.getElementById('search-input');
@@ -53,15 +58,19 @@
   const STRIP_ROWS_MIN = 1;
   const STRIP_ROWS_MAX = 4;
   const FAVOURITES_ROWS_KEY = 'soundboard-favourites-rows';
+  const ADDED_ROWS_KEY = 'soundboard-added-rows';
+  /** How many sounds "Recently added" shows (same cap as Recents). */
+  const RECENTLY_ADDED_LIMIT = 20;
   const RECENTS_ROWS_KEY = 'soundboard-recents-rows';
   const LOCAL_RECENTS_KEY = 'soundboard-recents-local';
   const QUICK_ACCESS_COLLAPSED_KEY_PREFIX = 'soundboard-quick-access-collapsed:';
   const AUTO_LEVEL_KEY = 'soundboard-auto-level';
 
   let favouriteStripRows = 1;
+  let addedStripRows = 1;
   let recentStripRows = 1;
   let favouriteReorderMode = false;
-  let quickAccessCollapsed = { recents: false, favourites: false };
+  let quickAccessCollapsed = { recents: false, favourites: false, added: false };
 
   window.SoundboardImageResolver = {
     resolve: function (url) {
@@ -164,14 +173,15 @@
   function loadQuickAccessCollapsedState() {
     try {
       const raw = localStorage.getItem(getQuickAccessCollapsedKey());
-      if (!raw) return { recents: false, favourites: false };
+      if (!raw) return { recents: false, favourites: false, added: false };
       const parsed = JSON.parse(raw);
       return {
         recents: !!(parsed && parsed.recents),
-        favourites: !!(parsed && parsed.favourites)
+        favourites: !!(parsed && parsed.favourites),
+        added: !!(parsed && parsed.added)
       };
     } catch (_) {
-      return { recents: false, favourites: false };
+      return { recents: false, favourites: false, added: false };
     }
   }
 
@@ -179,7 +189,8 @@
     try {
       localStorage.setItem(getQuickAccessCollapsedKey(), JSON.stringify({
         recents: !!quickAccessCollapsed.recents,
-        favourites: !!quickAccessCollapsed.favourites
+        favourites: !!quickAccessCollapsed.favourites,
+        added: !!quickAccessCollapsed.added
       }));
     } catch (_) {}
   }
@@ -196,6 +207,29 @@
     try {
       localStorage.setItem(FAVOURITES_ROWS_KEY, String(clampStripRows(favouriteStripRows)));
     } catch (_) {}
+  }
+
+  function loadAddedStripRows() {
+    try {
+      return clampStripRows(localStorage.getItem(ADDED_ROWS_KEY));
+    } catch (_) {
+      return STRIP_ROWS_MIN;
+    }
+  }
+
+  function saveAddedStripRows() {
+    try {
+      localStorage.setItem(ADDED_ROWS_KEY, String(clampStripRows(addedStripRows)));
+    } catch (_) {}
+  }
+
+  /** Newest first, by the date each sound was added to the board. */
+  function recentlyAddedSounds(board) {
+    return (board.sounds || [])
+      .filter(function (s) { return s && s.addedAt && !isNaN(Date.parse(s.addedAt)); })
+      .slice()
+      .sort(function (a, b) { return Date.parse(b.addedAt) - Date.parse(a.addedAt); })
+      .slice(0, RECENTLY_ADDED_LIMIT);
   }
 
   function loadRecentStripRows() {
@@ -224,7 +258,8 @@
       .filter(Boolean);
     return {
       favourites: soundsForRender(favourites),
-      recents: soundsForRender(recents)
+      recents: soundsForRender(recents),
+      added: soundsForRender(recentlyAddedSounds(board))
     };
   }
 
@@ -249,6 +284,14 @@
       const caret = favouritesCollapseToggleEl.querySelector('.quick-access__caret');
       if (caret) caret.textContent = isFavouritesCollapsed ? '\u25B6' : '\u25BC';
     }
+    const isAddedCollapsed = !!quickAccessCollapsed.added;
+    if (addedSectionEl) addedSectionEl.classList.toggle('quick-access__section--collapsed', isAddedCollapsed);
+    if (addedCountEl) addedCountEl.textContent = formatSoundCount(counts.added || 0);
+    if (addedCollapseToggleEl) {
+      addedCollapseToggleEl.setAttribute('aria-expanded', isAddedCollapsed ? 'false' : 'true');
+      const caret = addedCollapseToggleEl.querySelector('.quick-access__caret');
+      if (caret) caret.textContent = isAddedCollapsed ? '\u25B6' : '\u25BC';
+    }
   }
 
   function renderQuickAccess(renderOpts) {
@@ -261,10 +304,21 @@
     if (favouritesSectionEl) favouritesSectionEl.hidden = false;
     if (recentsSectionEl) recentsSectionEl.hidden = false;
 
+    if (addedSectionEl) addedSectionEl.hidden = false;
     updateQuickAccessCollapseUi({
       recents: strips.recents.length,
-      favourites: strips.favourites.length
+      favourites: strips.favourites.length,
+      added: strips.added.length
     });
+    if (addedRowsSelectEl) {
+      const addRows = String(clampStripRows(addedStripRows));
+      if (addedRowsSelectEl.value !== addRows) addedRowsSelectEl.value = addRows;
+    }
+    const addRowCount = clampStripRows(addedStripRows);
+    if (addedStripEl) {
+      addedStripEl.classList.toggle('sound-strip--multirow', addRowCount > 1);
+      addedStripEl.style.setProperty('--added-strip-rows', String(addRowCount));
+    }
 
     if (favouritesRowsSelectEl) {
       const favRows = String(clampStripRows(favouriteStripRows));
@@ -331,10 +385,20 @@
       empty.textContent = 'No recent plays yet. Play a sound to populate this list.';
       recentsStripEl.appendChild(empty);
     }
+
+    if (strips.added.length > 0 && addedStripEl) {
+      UI.renderHorizontalStrip(addedStripEl, strips.added, playingId, errorIds, onPlay, onEdit, stripOpts);
+    } else if (addedStripEl) {
+      addedStripEl.textContent = '';
+      const empty = document.createElement('p');
+      empty.className = 'sound-strip__empty';
+      empty.textContent = 'Sounds you add or import from now on will show up here, newest first.';
+      addedStripEl.appendChild(empty);
+    }
   }
 
   function toggleQuickAccessSectionCollapse(sectionKey) {
-    const key = sectionKey === 'favourites' ? 'favourites' : 'recents';
+    const key = sectionKey === 'favourites' || sectionKey === 'added' ? sectionKey : 'recents';
     quickAccessCollapsed[key] = !quickAccessCollapsed[key];
     saveQuickAccessCollapsedState();
     render();
@@ -345,6 +409,14 @@
     if (clamped === favouriteStripRows) return;
     favouriteStripRows = clamped;
     saveFavouriteStripRows();
+    render();
+  }
+
+  function setAddedStripRows(nextRows) {
+    const clamped = clampStripRows(nextRows);
+    if (clamped === addedStripRows) return;
+    addedStripRows = clamped;
+    saveAddedStripRows();
     render();
   }
 
@@ -387,6 +459,7 @@
     if (gridEl) UI.updateTileState(gridEl, soundId, state);
     if (recentsStripEl) UI.updateTileState(recentsStripEl, soundId, state);
     if (favouritesStripEl) UI.updateTileState(favouritesStripEl, soundId, state);
+    if (addedStripEl) UI.updateTileState(addedStripEl, soundId, state);
   }
 
   function renderRecentsStripOnly(renderOpts) {
@@ -872,6 +945,7 @@
       }
 
       const board = getBoard();
+      result.sound.addedAt = new Date().toISOString();
       board.sounds.push(result.sound);
       Repo.setBoard(board);
       hotkeyMap = buildHotkeyMap();
@@ -1316,6 +1390,16 @@
         toggleQuickAccessSectionCollapse('favourites');
       });
     }
+    if (addedCollapseToggleEl) {
+      addedCollapseToggleEl.addEventListener('click', function () {
+        toggleQuickAccessSectionCollapse('added');
+      });
+    }
+    if (addedRowsSelectEl) {
+      addedRowsSelectEl.addEventListener('change', function () {
+        setAddedStripRows(addedRowsSelectEl.value);
+      });
+    }
 
     if (globalVolume) {
       globalVolume.addEventListener('input', function () {
@@ -1437,6 +1521,7 @@
     initAudioRecovery();
     favouriteStripRows = loadFavouriteStripRows();
     recentStripRows = loadRecentStripRows();
+    addedStripRows = loadAddedStripRows();
     setStatus('Loading board…');
     try {
       const result = await Repo.loadInitial();

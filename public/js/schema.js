@@ -111,8 +111,14 @@
       endMs: normalizeEndMs(s.endMs, s.startMs, s.extra),
       hotkey: s.hotkey != null ? String(s.hotkey).trim() : '',
       color: s.color != null ? String(s.color).trim() : '',
-      extra: s.extra && typeof s.extra === 'object' ? { ...s.extra } : {}
+      extra: s.extra && typeof s.extra === 'object' ? { ...s.extra } : {},
+      // When the sound was added to this board (ISO time). Older sounds have none.
+      ...(validIsoDate(s.addedAt) ? { addedAt: String(s.addedAt) } : {})
     };
+  }
+
+  function validIsoDate(v) {
+    return typeof v === 'string' && v.length >= 10 && !isNaN(Date.parse(v));
   }
 
   function normalizeBoard(board) {
@@ -163,6 +169,7 @@
       hotkey: '',
       color: '#6b7280',
       extra: {},
+      addedAt: new Date().toISOString(),
       ...o
     });
   }

@@ -116,6 +116,29 @@
         </div>
         <div id="favourites-strip" class="sound-strip sound-strip--favorites" role="list"></div>
       </div>
+      <div id="added-section" class="quick-access__section">
+        <div class="quick-access__header">
+          <button type="button" id="added-collapse-toggle" class="quick-access__toggle category__header" aria-expanded="true" aria-label="Collapse recently added">
+            <span class="category__title">
+              <span class="category__caret quick-access__caret" aria-hidden="true">▼</span>
+              <span class="quick-access__title">Recently added</span>
+            </span>
+            <span id="added-count" class="category__count">0 sounds</span>
+          </button>
+          <div class="quick-access__controls">
+            <label class="quick-access__rows-control" for="added-rows-select">
+              <span>Rows</span>
+              <select id="added-rows-select" class="quick-access__rows-select" aria-label="Recently added rows">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <div id="added-strip" class="sound-strip sound-strip--added" role="list"></div>
+      </div>
     </section>
     <div class="main__board">
       <div id="sound-grid" class="grid grid-groups" role="list"></div>
